@@ -155,3 +155,130 @@ Libraries->CMSIS -> CM3-> DeviceSupport-> ST-> STM32F10x-> startup-> arm->是启
 扳手里Encoding->UTF-8可以防止中文乱码
 
 ![image-20230727223028463](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230727223028463.png)
+
+## GPIO(General Purpose Input Output)
+
+![image-20230728165456887](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728165456887.png)
+
+-   所有的GPIO都是挂接在APB2外设总线上的
+
+![image-20230728165623250](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728165623250.png)
+
+![image-20230728165630656](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728165630656.png)
+
+-   命名方式从GPIOA，GPIOB，GPIOC以此类推（PA，PB，PC）
+-   每个外设有16个引脚
+-   寄存器有32位，但是端口只有16位置，所以只有低16位寄存器有效
+
+### GPIO位结构
+
+![image-20230728194340852](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728194340852.png)
+
+-   寄存器 - 驱动器 - IO口引脚
+
+![image-20230728201936661](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728201936661.png)
+
+-   上面是输入部分，下面是输出部分
+
+![image-20230728205443019](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728205443019.png)
+
+-   保护二极管对输入电压进行限V
+-   如果输入电压大于3.3V，上面的二极管就会导通，输入电压就会流入VDD
+-   如果输入电压小于-0V，下面的二极管就会导通，输入电压就会流入VSS
+
+![image-20230728211242297](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728211242297.png)
+
+-   上拉电阻到VDD，下拉电阻到VSS
+-   上面导通下面断开：上拉输入模式
+-   下面导通上面断开：下拉输入模式
+-    两个都断开: 浮空输入模式
+-   如果引脚没有连接，端口处于浮空状态（未知），容易混乱。上下拉保证电平高低
+-   弱上下拉，不影响输入操作
+
+![image-20230728212013176](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728212013176.png)
+
+-   施密特触发器：对输入电压整形。
+    -   输入电压**大于**阈值，输出瞬间高电平
+    -   输入电压**小于**阈值，输出瞬间底电平
+    -   应对失真信号，超微的抖动不会超过阈值，所以不会有影响
+
+![image-20230728212056212](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728212056212.png)
+
+-   现在可以写入输入寄存器
+-   模拟输入链接得到ADC
+-   复用功能输入：用于其他外设（接收数电）
+
+![image-20230728212300747](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728212300747.png)
+
+-   二选一进入输出控制
+-   输出寄存器：IO口输出
+    -   =& =|
+    -   只能整体读写，用**位设置/清楚**寄存器改单位置
+    -   读写“位带”（位寻址）
+
+![image-20230728213311492](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728213311492.png)
+
+-   两个MOS管（电子开关）
+-   开关把IO口接到VDD或者VSS
+-   **推挽输出**
+    -   P和N-MOS都有效
+    -   1时上面导通下面断开接到VDD
+    -   0时下面导通上面断开接到VSS
+    -   **强驱动能力**，对IO口有绝对控制权
+-   **开漏模式**
+    -   只有N-MOS在工作
+    -   1时下面断开，高电阻模式（无驱动能力）
+    -   0时下面导通，VSS低电平（有驱动能力）
+    -   作为通信协议的引脚（驱动方式）。可以避免多个设备之间的干扰
+    -   可以接上拉电阻。在高电平的时候直接被上拉到5V
+    ![image-20230728213945204](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728213945204.png)
+-   **关闭**（输入模式）
+    -   两个MOS都无效，输出关闭，端口信号由外部控制
+
+### 八种模式
+
+![image-20230728214141944](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728214141944.png)![image-20230728214307471](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728214307471.png)
+
+-   模拟输入是ADC专属
+
+![image-20230728230925330](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728230925330.png)
+
+![image-20230728231016419](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728231016419.png)
+
+![image-20230728231115608](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728231115608.png)
+
+### 寄存器
+
+-   每一个端口用四位配置，16个端口需要64位
+-   端口配置低寄存器，端口配置高寄存器
+-   端口输入数据寄存器低16位置有效，对应16个引脚
+-   端口输出数据寄存器低16位置有效，对应16个引脚
+-   端口位设置，清除寄存器（高16位清除，低16位设置）（对一个端口同时设置和清除，同步性高）
+-   端口位清除寄存器 = 清除寄存器(低16位有效)
+-   端口配置锁定寄存器：防止意外更改
+
+## LED, Buzzer
+
+![image-20230728234946547](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728234946547.png)
+
+-   三极管开关进行蜂鸣器驱动（0响1关闭，低电平触发）
+
+![image-20230728235446930](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728235446930.png)
+
+![image-20230728235512581](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728235512581.png)
+
+![image-20230728235556971](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728235556971.png)
+
+-   两种不同的输出方式，按照驱动能力去设计电路（一般高弱底强）
+
+![image-20230728235652821](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728235652821.png)
+
+-   三极管开关驱动
+-   三极管：基极，发射极，集电极
+-   上：PNP三极管（0）
+-   下：NPN三极管（1）
+-   负载位置很重要，因为需要启动电压
+
+### Bread Board
+
+![image-20230729001053685](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230729001053685.png)
