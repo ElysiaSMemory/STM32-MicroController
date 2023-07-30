@@ -257,6 +257,87 @@ Libraries->CMSIS -> CM3-> DeviceSupport-> ST-> STM32F10x-> startup-> arm->是启
 -   端口位清除寄存器 = 清除寄存器(低16位有效)
 -   端口配置锁定寄存器：防止意外更改
 
+### 启用方法
+
+-   使用RCC开启GPIO的时钟
+-   使用GPIO_Init初始化GPIO
+-   使用输入或者输出函数控制GPIO口
+
+#### RCC的库函数
+
+```c
+// AHB外设时钟控制
+/*
+@brief  Enables or disables the AHB peripheral clock.
+@param  RCC_AHBPeriph: specifies the AHB peripheral to gates its clock.
+@param  NewState: new state of the specified peripheral clock.
+This parameter can be: ENABLE or DISABLE.
+*/
+void RCC_AHBPeriphClockCmd(uint32_t RCC_AHBPeriph, FunctionalState NewState);
+// APB2外设时钟控制
+void RCC_APB2PeriphClockCmd(uint32_t RCC_APB2Periph, FunctionalState NewState);
+// APB1外设时钟控制
+void RCC_APB1PeriphClockCmd(uint32_t RCC_APB1Periph, FunctionalState NewState);
+
+```
+
+#### GPIO库函数
+
+```c
+// Reset the GPIO
+// PARAM: GPIOA, GPIOB...
+void GPIO_DeInit(GPIO_TypeDef* GPIOx);
+
+// Reset the AFIO
+void GPIO_AFIODeInit(void);
+
+// Using Struct to Initialize GPIO
+void GPIO_Init(GPIO_TypeDef* GPIOx, GPIO_InitTypeDef* GPIO_InitStruct);
+
+// Give Struct a default value
+void GPIO_StructInit(GPIO_InitTypeDef* GPIO_InitStruct);
+
+
+//// READING
+uint8_t GPIO_ReadInputDataBit(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
+uint16_t GPIO_ReadInputData(GPIO_TypeDef* GPIOx);
+uint8_t GPIO_ReadOutputDataBit(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
+uint16_t GPIO_ReadOutputData(GPIO_TypeDef* GPIOx);
+
+
+//// WRITING
+// @brief Set selected IO to be high
+void GPIO_SetBits(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
+// @brief Set selected IO to be low
+void GPIO_ResetBits(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
+// @brief Set selected IO to be BitVal
+void GPIO_WriteBit(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin, BitAction BitVal);
+// @brief Set all 16 IOs to be PortVal
+void GPIO_Write(GPIO_TypeDef* GPIOx, uint16_t PortVal);
+
+
+// MODE
+// Analog Input
+GPIO_Mode_AIN = 0x0,
+// Floating Input
+GPIO_Mode_IN_FLOATING = 0x04,
+// In Pull Down
+GPIO_Mode_IPD = 0x28,
+// In Pull Up
+GPIO_Mode_IPU = 0x48,
+// Out Open Drain 开漏输出
+GPIO_Mode_Out_OD = 0x14,
+// Out Push Pull 推挽输出
+GPIO_Mode_Out_PP = 0x10,
+// Atl Open Drain 复用开漏
+GPIO_Mode_AF_OD = 0x1C,
+// Atl Push Pull 复用推挽
+GPIO_Mode_AF_PP = 0x18
+
+```
+
+
+
 ## LED, Buzzer
 
 ![image-20230728234946547](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728234946547.png)
@@ -283,4 +364,3 @@ Libraries->CMSIS -> CM3-> DeviceSupport-> ST-> STM32F10x-> startup-> arm->是启
 
 ![image-20230729001053685](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230729001053685.png)
 
-Test
