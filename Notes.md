@@ -297,6 +297,7 @@ void GPIO_Init(GPIO_TypeDef* GPIOx, GPIO_InitTypeDef* GPIO_InitStruct);
 // Give Struct a default value
 void GPIO_StructInit(GPIO_InitTypeDef* GPIO_InitStruct);
 
+// !!!! 按位或可以选择多个设备
 
 //// READING
 uint8_t GPIO_ReadInputDataBit(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
