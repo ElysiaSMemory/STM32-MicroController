@@ -257,11 +257,12 @@ Libraries->CMSIS -> CM3-> DeviceSupport-> ST-> STM32F10x-> startup-> arm->是启
 -   端口位清除寄存器 = 清除寄存器(低16位有效)
 -   端口配置锁定寄存器：防止意外更改
 
-### 启用方法
+### GPIO输出
 
 -   使用RCC开启GPIO的时钟
 -   使用GPIO_Init初始化GPIO
 -   使用输入或者输出函数控制GPIO口
+-   默认开机输出为0
 
 #### RCC的库函数
 
@@ -299,13 +300,6 @@ void GPIO_StructInit(GPIO_InitTypeDef* GPIO_InitStruct);
 
 // !!!! 按位或可以选择多个设备
 
-//// READING
-uint8_t GPIO_ReadInputDataBit(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
-uint16_t GPIO_ReadInputData(GPIO_TypeDef* GPIOx);
-uint8_t GPIO_ReadOutputDataBit(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
-uint16_t GPIO_ReadOutputData(GPIO_TypeDef* GPIOx);
-
-
 //// WRITING
 // @brief Set selected IO to be high
 void GPIO_SetBits(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
@@ -337,9 +331,7 @@ GPIO_Mode_AF_PP = 0x18
 
 ```
 
-
-
-## LED, Buzzer
+### LED, Buzzer
 
 ![image-20230728234946547](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230728234946547.png)
 
@@ -364,4 +356,103 @@ GPIO_Mode_AF_PP = 0x18
 ### Bread Board
 
 ![image-20230729001053685](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230729001053685.png)
+
+### 按键
+
+![image-20230731142134147](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731142134147.png)
+
+-   注意需要过滤按键抖动
+-   最简单的方法是加一段延时
+
+### 传感器模块
+
+-   光敏电阻，热敏电阻，对射红外，反射红外
+
+![image-20230731142348878](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731142348878.png)
+
+-   电阻的变化不容易被察觉，所以与定值电阻串联分压得到模拟输出
+
+![image-20230731142611212](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731142611212.png)
+
+-   N1是可变电阻，与R1进行分压
+-   C2是滤波电容，保证输出平滑（一端接在电路中，一端接地）分析时可以抹掉
+-   **当N1的阻值变小，下拉作用增强， AO端口电压被拉低（极端0， GND）**
+-   **当N1的阻值变大，上拉作用增强， AO端口电压被升高（极端1， VCC）**
+-   类比弹簧，阻值越小拉力越强
+
+![image-20230731143915243](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731143915243.png)
+
+-   中间是VCC/2
+-   AO就是模拟电压的输出
+
+![image-20230731144123328](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731144123328.png)
+
+-   同时支持数字输出，二值化后的输出，由LM393芯片完成（电压比较器芯片）
+
+![image-20230731144237874](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731144237874.png)
+
+-   电压比较器，哪边电压大瞬间到那边的极端（VCC， GND）
+
+![image-20230731144443332](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731144443332.png)
+
+-   电位器可以输出IN-的可调阈值电压
+-   这个电压和上面的比较
+
+![image-20230731144516169](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731144516169.png)
+
+-   比较结果是DO，然后引到数字电压输出
+
+![image-20230731144553505](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731144553505.png)
+
+-   左边是电源指示灯，右边是输出指示灯
+
+![image-20230731144634085](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731144634085.png)
+
+-   R5上拉电阻保证默认高电平
+
+![image-20230731145245833](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731145245833.png)
+
+-   图1，默认按下是0，松开是悬空(上拉输入模式)
+-   图2，外部上拉电阻，按下是无穷大（无电阻）的力下拉引脚GND (浮空，上拉输入模式)
+
+![image-20230731145258655](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731145258655.png)
+
+-   按下为1
+-   要求配置为下拉输入模式
+
+![image-20230731145439813](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731145439813.png)
+
+### C语言相关参考
+
+![image-20230731145738685](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731145738685.png)
+
+![image-20230731150331878](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731150331878.png)
+
+![image-20230731150542921](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731150542921.png)
+
+![image-20230731150728392](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731150728392.png)
+
+-   可以用 Typedef来简化定义
+
+![image-20230731151956279](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731151956279.png)
+
+![image-20230731152115650](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731152115650.png)
+
+-   顺序的数字编译器会自动填上
+
+### GPIO输入
+
+```c
+//// READING
+// @brief 读取一位
+uint8_t GPIO_ReadInputDataBit(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
+// @brief 读取整个寄存器
+uint16_t GPIO_ReadInputData(GPIO_TypeDef* GPIOx);
+// @brief 读取输出输出寄存器的某一位，不是端口输入，用来看输出的是什么
+uint8_t GPIO_ReadOutputDataBit(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
+// @brief 读取输出整个输出寄存器，不是端口输入，用来看输出的是什么
+uint16_t GPIO_ReadOutputData(GPIO_TypeDef* GPIOx);
+```
+
+![image-20230731163707272](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731163707272.png)
 
