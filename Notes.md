@@ -422,6 +422,8 @@ GPIO_Mode_AF_PP = 0x18
 
 ![image-20230731145439813](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731145439813.png)
 
+-   光敏传感器：亮的情况下，输出低电平，指示灯亮
+
 ### C语言相关参考
 
 ![image-20230731145738685](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731145738685.png)
