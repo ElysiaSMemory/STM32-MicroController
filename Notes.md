@@ -458,3 +458,20 @@ uint16_t GPIO_ReadOutputData(GPIO_TypeDef* GPIOx);
 
 ![image-20230731163707272](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731163707272.png)
 
+## OLED
+
+![image-20230731205101518](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731205101518.png)
+
+![image-20230731221616642](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731221616642.png)
+
+-   每一个像素都是可以自发光的发光二极管，不像LCD需要背光，所以省电，响应快，有更快的刷新频率
+-   四针脚I2C通讯协议， 七针脚SPI通讯协议
+
+![image-20230731224026361](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731224026361.png)
+
+![image-20230731225539368](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731225539368.png)
+
+![image-20230731225553755](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731225553755.png)
+
+-   行-列
+
