@@ -1,5 +1,10 @@
 #include "stm32f10x.h"                  // Device header
 
+/**
+ * @brief Initialize Light Sensor
+ * @param None
+ * @retval None
+ */
 void LightSensor_Init(void)
 {
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
@@ -11,7 +16,11 @@ void LightSensor_Init(void)
 	GPIO_Init(GPIOB, &GPIO_InitStructure);	
 }
 
-
+/**
+ * @brief Read Digital Output from Light Sensor
+ * @param None
+ * @retval None
+ */
 uint8_t LightSensor_Get(void)
 {
 	return GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_13);
