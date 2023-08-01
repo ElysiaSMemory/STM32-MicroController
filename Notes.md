@@ -1,5 +1,7 @@
 # STM32
 
+## 简介
+
 -   ST公司开发的32位单片机 
 
 ![image-20230727163935701](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230727163935701.png)
@@ -454,6 +456,8 @@ uint16_t GPIO_ReadInputData(GPIO_TypeDef* GPIOx);
 uint8_t GPIO_ReadOutputDataBit(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
 // @brief 读取输出整个输出寄存器，不是端口输入，用来看输出的是什么
 uint16_t GPIO_ReadOutputData(GPIO_TypeDef* GPIOx);
+// @brief 锁定引脚配置
+void GPIO_PinLockConfig(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
 ```
 
 ![image-20230731163707272](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731163707272.png)
@@ -474,4 +478,268 @@ uint16_t GPIO_ReadOutputData(GPIO_TypeDef* GPIOx);
 ![image-20230731225553755](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230731225553755.png)
 
 -   行-列
+
+## 中断系统
+
+### 简介
+
+ ![image-20230801160643013](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801160643013.png)
+
+![image-20230801161246670](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801161246670.png)
+
+![image-20230801161437408](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801161437408.png)
+
+-   EXTI 外部中断
+
+-   TIM 定时器
+
+-   ADC 模数转换
+
+-   USART 串口
+
+-   SPI 通信
+
+-   I2C 通信
+
+-   RTC 实时时钟
+
+NVIC是STM32内部用于管理中断，分配优先级的
+
+### 中断类型
+
+![image-20230801161713837](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801161713837.png)
+
+灰色的是内核中断（高深，不常用），下面的是外设中断
+
+![image-20230801161954762](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801161954762.png)![image-20230801162000344](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801162000344.png)
+
+0：窗口看门狗，如果没有及时喂狗，看门狗就会申请中断，可以进行错误检查
+1：PVD电源中断，如果供电不足会申请中断，可以在中断里赶紧保存数据
+。。。。。。
+
+外设电路检测到异常就可以申请中断
+
+EXTI0到EXTI4 && EXTI9_5 && EXTI15_10是**外部中断**
+
+程序中的中断函数地址是由编译器分配的，不固定。中断跳转因为硬件限制只能到固定地方执行程序。只有在那个固定地址里再一次引导才能找到不固定的函数位置。
+
+中断发生后跳转到固定位置（**中断向量表**），在固定位置由变迁一起再加上跳转到中断函数的代码
+
+![image-20230801162713690](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801162713690.png)
+
+### NVIC基本结构
+
+统一分配中断优先级和管理中断
+内核外设，CPU助手
+![image-20230801163643371](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801163643371.png)
+
+-   n代表一个设备可能占用多个中断
+-   可以类比医院有个区号大厅分配病人登记，叫号系统判断紧急程度，分配给医生处置
+
+### 优先级分组
+
+-   **响应优先级**：这个人直接插队在外面排队的人，正在看病的看完马上轮到他
+-   **抢占优先级**：这个人直接插队挤开正在看病的人，靠边站（优先级高的是可以嵌套的）。这个人看完了，之前的人继续看病。
+
+每个中断有16个优先级，所以我们进行**分组**
+
+-   四位刚好可以表示0~16，也就是16个优先级
+-   **数字越小优先级越高**， 如果响应等级相同，按照图表排列处理
+
+![image-20230801164737900](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801164737900.png)
+
+我们会选好其中的分组方式，注意取值范围可能不同
+
+### EXTI外部中断（Extern Interrupt）
+
+引脚电平发生变化，触发中断
+
+![image-20230801165004572](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801165004572.png)
+
+-   相同的PIN指的是比如PA0, PB0, PC0...
+-   外部中断可以从低功耗模式的停止模式下唤醒STM32（用于唤醒停止模式）
+-   事件响应：可以选择不触发中断（不通向CPU）通向其他外设
+
+### EXTI基本结构
+
+-   AFIO在3 * 16个引脚中选择一个引脚连接到EXTI的通道里（所以不能重复）
+-   EXTI所以有20个输入信号
+-   ST把外部中断的5~9， 9~15分配到了一个通道里，减少压力
+
+![image-20230801165830205](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801165830205.png)
+
+![image-20230801165905938](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801165905938.png)
+
+**AFIO内部结构，MUX数据选择器**
+
+![image-20230801170022043](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801170022043.png)
+
+注意也可以换**复用引脚功能的定义**
+
+![image-20230801170328369](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801170328369.png)
+
+**EXTI内部框图**
+
+-   上路是触发中断，下路触发事件
+
+![image-20230801170422186](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801170422186.png)
+
+挂起寄存器相当于中断标志位，读取这个寄存器可以知道是哪一个通道触发
+
+![image-20230801170517883](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801170517883.png)
+
+看是否屏蔽中断，然后才去中断
+
+![image-20230801170620122](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801170620122.png)
+
+另一条路的走法
+
+![image-20230801170639461](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801170639461.png)
+
+可以通过总线访问这些寄存器
+
+### 红外对管传感器
+
+-   遮住中间输出高电平，输出指示灯灭掉
+-   灭掉再亮起会产生下降沿
+
+### 旋转编码器
+
+![image-20230801195213794](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801195213794.png)
+
+-   图一：光栅式：光栅编码盘转动的时候，红外传感器的红外光会接收到透过，不透，透过，不透的信号，也就是方波，个数是角度，频率是转速。外部中断可以捕捉方波边沿来实现操作。（**单相输出**：正反没法区别）
+-   图二图三：机械触点：中间有个按键。类比光栅，在转盘上有金属触点。依次接通和断开两边的触点。两侧触点的通断是90度的相位差（**两相正交输出**）
+
+![image-20230801195657509](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801195657509.png)![image-20230801195948030](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801195948030.png)
+
+正向旋转时，B相输出是滞后90度
+
+![image-20230801200036666](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801200036666.png)
+
+反向旋转时，B相输出是提前90度
+
+-   图四：霍尔传感器类型：内部有一个磁体，边上有两个位置错开的霍尔传感器，当磁铁旋转，霍尔传感器可以输出正交方波信号
+
+#### 硬件电路
+
+![image-20230801200634405](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801200634405.png)
+
+-   默认上拉，导通后就和中间GND直接拉低，通过R3（输出限流电阻）后输出低电平A
+-   C1是滤波电容
+
+![image-20230801201257837](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801201257837.png)
+
+### 手册相关
+
+-   NVIC寄存器相关参考手册``STM43F10xxx Cortex-M3编程手册``
+-   中断分组相关的寄存器在SCB里面
+-   通过改变寄存器可以AFIO，GPIO的映射关系
+
+### 代码相关（AFIO, EXTI），配置步骤
+
+![image-20230801205759992](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801205759992.png)
+
+**打通信号电路**
+
+1.   RCC启用所有用到外设的时钟，**AFIO和GPIO都是APB2，EXTI和NVIC（内核内的外设）默认一直打开**
+2.   配置GPIO为输入模式
+     -   注意不知道什么模式参考手册![image-20230801210859662](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801210859662.png)
+
+3.   配置**AFIO（和GPIO在一个Library文件内）**，选择我们用的GPIO，连接到后面的EXTI
+
+     ```c
+     // @brief 复位AFIO，配置清除
+     void GPIO_AFIODeInit(void);
+     
+     // @brief 配置AFIO的事件输出功能
+     void GPIO_EventOutputConfig(uint8_t GPIO_PortSource, uint8_t GPIO_PinSource);
+     void GPIO_EventOutputCmd(FunctionalState NewState);
+     
+     // @brief 对引脚重新映射
+     void GPIO_PinRemapConfig(uint32_t GPIO_Remap, FunctionalState NewState);
+     
+     // @brief 配置AFIO数据选择器来选择中断引脚
+     void GPIO_EXTILineConfig(uint8_t GPIO_PortSource, uint8_t GPIO_PinSource);
+     
+     // @brief 以太网相关
+     void GPIO_ETH_MediaInterfaceConfig(uint32_t GPIO_ETH_MediaInterface);
+     
+     ```
+
+     ![image-20230801212057596](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801212057596.png)
+
+     **注意配置好后EXTI是默认和端口数据的数字一样**
+
+4.   配置EXTI配置边沿触发模式（上升下降，双边），**中断响应**或事件响应
+
+     ```c
+     // @brief 恢复上电默认状态
+     void EXTI_DeInit(void);
+     
+     // @brief 根据结构体初始化EXTI！！常用 
+     void EXTI_Init(EXTI_InitTypeDef* EXTI_InitStruct);
+     
+     // @brief 根据默认结构体初始化EXTI
+     void EXTI_StructInit(EXTI_InitTypeDef* EXTI_InitStruct);
+     
+     // @brief 软件触发外部中断
+     void EXTI_GenerateSWInterrupt(uint32_t EXTI_Line);
+     
+     // @brief 状态标志位（挂起寄存器）获取是否指定标志位被置1
+     FlagStatus EXTI_GetFlagStatus(uint32_t EXTI_Line);
+     
+     // @brief 清除指定标志位，置0
+     void EXTI_ClearFlag(uint32_t EXTI_Line);
+     
+     // @brief （置标志位后会中断。如果需要在中断函数里查看和清除标志位用这两个。）获取中断标志位是否被置1
+     ITStatus EXTI_GetITStatus(uint32_t EXTI_Line);
+     
+     // @brief 清除中断挂起标志位
+     void EXTI_ClearITPendingBit(uint32_t EXTI_Line);
+     
+     ```
+
+     
+
+5.   配置**NVIC(Library里在misc)**，选择合适的优先级，从这里进入CPU
+
+```c
+// @brief 中断分组设置
+void NVIC_PriorityGroupConfig(uint32_t NVIC_PriorityGroup);
+// pre-emption priority and subpriority
+//先占优先级（急）/响应优先级（不急）
+
+// @brief 根据结构体初始化
+void NVIC_Init(NVIC_InitTypeDef* NVIC_InitStruct);
+// NVIC_IRQChannel： 跳转后选择STM32F10X_MD 本芯片型号， EXTERN 1-4 是通用的，查看文件186行
+
+
+// @brief 设置中断向量表
+void NVIC_SetVectorTable(uint32_t NVIC_VectTab, uint32_t Offset);
+
+// @brief 系统低功耗配置
+void NVIC_SystemLPConfig(uint8_t LowPowerMode, FunctionalState NewState);
+
+```
+
+6.   写**中断函数**
+
+查看启动文件![image-20230801224531014](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801224531014.png)
+
+``IRQHandler `` 就是中断相关的东西（函数名称）
+
+```c
+// EXAMPLE
+void EXTI15_10_IRQHandler(void)
+{
+	// Check Flag is right?
+	if (EXTI_GetITStatus(EXTI_Line14) == SET)
+	{
+		// Clear Flag
+		EXTI_ClearITPendingBit(EXTI_Line14);
+		
+		// Code Here
+	}
+}
+```
 
