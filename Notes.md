@@ -618,6 +618,17 @@ EXTI0到EXTI4 && EXTI9_5 && EXTI15_10是**外部中断**
 
 反向旋转时，B相输出是提前90度
 
+![image-20230801232458925](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801232458925.png)
+
+-   在A的下降沿读取B的电平，高是正转，低是反转（不爽，第一种情况一转，一格，就中断，第二种情况转完进入中断）
+
+![image-20230801232806882](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230801232806882.png)
+
+-   **都触发中断**
+    -   **在B下降沿&&A底电平判断正转**
+    -   **在A下降沿&&B底电平判断反转**
+    -   转到位了才执行加减操作
+
 -   图四：霍尔传感器类型：内部有一个磁体，边上有两个位置错开的霍尔传感器，当磁铁旋转，霍尔传感器可以输出正交方波信号
 
 #### 硬件电路
@@ -743,3 +754,167 @@ void EXTI15_10_IRQHandler(void)
 }
 ```
 
+## TIM定时器
+
+### 简介
+
+![image-20230802162841732](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802162841732.png)
+比如在STM32中，基准时钟频率在72MHz，如果我记72个数字那就是1MHz，也就是1us的时间:
+72,000,000 #/sec  => 1/72,000,000 sec/#
+1/72,000,000 * 72 = 1/1,000,000 sec/#(72)
+1/1,000,000 sec = 0.000001 sec = 1us
+72 * 1,000 = 7,2000 => 1ms
+
+```c
+Counts = Desired Delay (us) * Timer Frequency (Hz)
+```
+
+![image-20230802162905297](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802162905297.png)
+
+-   **时基单元**（16位）
+    -   计数器：用来执行计数定时的寄存器，每来一个时钟，计数器++
+    -   预分频器：用来对计数器的时钟进行分频，让计数更加灵活
+    -   自动重装计时器：计数的目标值
+-   最大的情况，2^16^ = 65535；72MHz/65535/65535 = 中断频率；1/中断频率 = 59.65s (除以两次是因为分频器会让频率变慢，比如两次脉冲算一次脉冲)
+
+-   如果话不够可以用级联的方式，一个计时器的输出当作另一个计时器的输入
+
+![image-20230802165852588](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802165852588.png)
+
+### 定时器类型
+
+![image-20230802170001635](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802170001635.png)
+
+主要学习通用定时器
+高级定时器主要用于三相无刷电机
+
+### 基本定时器结构
+
+#### 定时中断
+
+![image-20230802210846386](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802210846386.png)
+
+-   预分频器连接到基准时钟的输入（基本型只能选择内部时钟）理解为连接到内部时钟（72MHz）
+-   关于分频：实际分频系数 = 预分频器的数值 + 1。比如，1分频就是输入72/**2** = 36 MHz。
+-   自动重装寄存器给予重装目标值。当计数和目标值一样就是时间到了 - **产生中断信号** - 清零计数器。
+-   一般这种中断叫做**更新中断** ``UI`` 之后通往NVIC
+-   另一个中断信号是事件中断，用于触发其他内部电路的工作，但是不触发中断
+
+#### 主（从）模式触发DAC
+
+让内部的硬件在不受程序控制下实现自动运行
+
+每隔一段时间就要触发DAC，让他输出下一个电压点
+
+-   正常思路：定时器产生中断，中断中调用代码手动触发DAC转换，然后输出（频繁中断不好）
+-   定时器设计了主模式，映射更新事件到触发输出TRGO，用TRGO触发DAC即可
+
+![image-20230802215548892](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802215548892.png)
+
+### 通用计时器结构
+
+![image-20230802215716737](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802215716737.png)
+
+![image-20230802215731759](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802215731759.png)
+
+-   时基单元是一样的，和基本计时器，流程也是一样的
+-   通用计时器不仅仅有向上计数。同时支持向下计数和中央对齐模式
+    -   向下计数：重装值开始，向下自减，减0之后，恢复重装并且中断
+    -   中央对齐模式：0开始到增加到重装值触发中断，然后开始往下减少到0又一次触发中断
+
+![image-20230802220152026](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802220152026.png)
+
+通用定时器除了使用内部时钟（72MHz），也可以使用外部时钟 
+
+-   来自TIMx_ETR引脚上的外部时钟
+
+![image-20230802220459914](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802220459914.png)
+
+![image-20230802220526688](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802220526688.png)
+
+-   一路从 ETRF进入触发器，作为时钟给时基单元
+-   这叫做**“外部时钟模式2”**
+
+接下来还可以有TRGI（Trigger IN）出发输入，可以触发**从模式**，后面讲。。。“ **外部时钟模式1”**
+
+从这一路进入的有以下引脚
+
+-   ETRP外部时钟
+-   ITR信号，来自**其他**定时器的时钟信号，分别来自其他四个的TRGO输出（通过这个可以串联计时器，第一个信号从更新事件的映射TRGO流出）
+![image-20230802221146594](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802221146594.png)
+![image-20230802221233318](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802221233318.png)![image-20230802221459531](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802221459531.png)
+
+-   TI1F_ED（上升沿下降沿均有效），连接的是输入单元的捕获引脚
+
+    ![image-20230802221611428](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802221611428.png)![image-20230802221713801](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802221713801.png)
+
+定时器编码器接口可以读取正交编码器的输出波形
+
+![image-20230802222012424](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802222012424.png)
+
+TRGO可以映射内部事件，不仅限于
+
+![image-20230802222123648](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802222123648.png)
+
+输出比较电路，四通道
+
+![image-20230802222134851](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802222134851.png)
+
+-   可以用于输出PWM波形驱动电机
+
+输入捕获电路，四通道
+
+![image-20230802222208940](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802222208940.png)
+
+-   可以用于测量输入方波的频率
+
+捕获/比较寄存器
+
+![image-20230802222301091](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802222301091.png)
+
+-   被两边共用（左右不能同时使用）
+
+### 高级定时器
+
+![image-20230802222350427](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802222350427.png)
+
+![image-20230802222400192](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802222400192.png)
+
+-   主要改动是右边部分，其他差别不大
+
+重复次数寄存器
+
+<img src="C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802222445310.png" alt="image-20230802222445310" style="zoom:150%;" />
+
+-   用这个计数器可以实现每过几个计数周期才发生一次中断或者事件（原来是每个周期都更新，又做了一次分频）
+
+死区生成电路DTG Dead Time Generator
+
+![image-20230802230928566](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802230928566.png)
+
+-   防止硬件导致的直通现象
+-   桥臂的上下管全部关闭
+
+互补的输出引脚
+
+![image-20230802232337770](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802232337770.png)
+
+-   可以输出互补的PWM
+-   用于驱动三相无刷电机（六个大功率开关管）
+-   第四路没有变化
+
+刹车输入
+
+![image-20230802234039338](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802234039338.png)
+
+-   切断电机输出防止意外
+
+### 简化版本
+
+![image-20230802234132010](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802234132010.png)
+
+-   运行控制：控制启动停止，向上向下
+
+![image-20230802234434093](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802234434093.png)
+
+-   中断输出控制判断是需要什么中断
