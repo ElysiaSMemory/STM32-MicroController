@@ -909,6 +909,14 @@ TRGO可以映射内部事件，不仅限于
 
 -   切断电机输出防止意外
 
+![image-20230804012928424](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804012928424.png)
+
+#### 滤波器的参数
+
+在固定的时钟频率下采样（采样频率f）如果**N个采样都是相同的电平，输出这个东西**，如果不是，输出上一个电平或者默认低电平
+
+``TIM_CKD_DIV1``
+
 ### 简化版本
 
 ![image-20230802234132010](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802234132010.png)
@@ -918,3 +926,132 @@ TRGO可以映射内部事件，不仅限于
 ![image-20230802234434093](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230802234434093.png)
 
 -   中断输出控制判断是需要什么中断
+
+### 预分频器时序
+
+![image-20230803162851040](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230803162851040.png)
+
+![image-20230803162905050](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230803162905050.png)
+
+-   CK_PSC是内部时间输入
+-   CNT_EN是计数器使能
+-   CK_CNT是分屏器输出，也是计数器的输入
+
+![image-20230803163241270](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230803163241270.png)
+
+使能后千半段预分频器的系数为1，输出和CK_CNT一样的信号。后半段预分频器的系数为2，每两次算一个，时钟变成一半
+
+![image-20230803164208012](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230803164208012.png)
+
+在计数器时钟的驱动下计数器也在上升。推测重新装载值ARR是FC，同时在下一个时钟沿触发触发更新寄存器和更新事件。
+
+![image-20230803164616767](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230803164616767.png)
+
+设计严谨，**不允许计数周期没有完成就改变分频系数**。如果在周期内改变了分频系数，这个值会通过**预分频缓冲器**（影子）在本计数周期结束时的下一个时钟沿生效。
+
+![image-20230803164656149](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230803164656149.png)
+
+预分频器内部也是计数器，在分频系数为0时一直输出；在分频系数1时，010101，每次回到0输出，**从而输出输入频率的二分频**
+
+![image-20230803164830252](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230803164830252.png)
+
+### 计数器时序
+
+![image-20230803170122997](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230803170122997.png)
+
+-   UIF是中断的标志位，至一后需要**手动清零**
+-   ARR有缓冲寄存器
+
+#### 溢出频率
+
+![image-20230803170209497](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230803170209497.png)
+
+-   CK_PSC 内部时钟输入
+-   PSC 分屏系数
+-   ARR 重新装载值
+
+#### 计数器影子（预装）寄存器是否开启
+
+![image-20230803170624898](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230803170624898.png)![image-20230803170637404](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230803170637404.png)
+
+-   通过更改ARPE位
+-   同理如果启用预装（影子），更改在下一个技术周期才有效
+
+### RCC时钟树
+
+![image-20230803171811397](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230803171811397.png)
+
+STM32用来产生和配置时钟，并且把配置好的时钟发送到外设的系统
+
+-   AHB往左都是时钟的产生电路，往右都是时钟的分配电路
+
+![image-20230803172603464](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230803172603464.png)
+
+SYSCLK是系统时钟，由两个高速晶振提供， AHB，APB1，APB2均来自这两个晶振。
+
+-   外部的石英振荡器比内部的RC振荡器要更加稳定
+
+![image-20230803173325935](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230803173325935.png)
+
+在SytemInit里，（1）首先启动**内部**时钟8MHz运行，（2）然后启动外部时钟，配置外部时钟进入PLL（3）进行8MHz**倍频9**倍，得到72MHz；等到锁相环稳定后再更换选择**锁相环输出为系统时钟**
+
+-   **CSS是时钟安全系统**，一旦外部时钟失效就会自动切换回内部时钟，防止卡死事故
+
+![image-20230803174809149](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230803174809149.png)
+
+### 程序相关
+
+![image-20230803232608885](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230803232608885.png)
+
+1.   RCC开启时钟
+2.   选择时基单元的时钟源（定时中断我们使用内部时钟源）
+
+```c
+// @brief 恢复缺省配置（上电配置）
+void TIM_DeInit(TIM_TypeDef* TIMx);
+// @brief 时基单元初始化
+void TIM_TimeBaseInit(TIM_TypeDef* TIMx, TIM_TimeBaseInitTypeDef* TIM_TimeBaseInitStruct);
+// @brief 时基单元结构体赋默认值
+void TIM_TimeBaseStructInit(TIM_TimeBaseInitTypeDef* TIM_TimeBaseInitStruct);
+// @brief 使能计数器（对应运行控制）
+void TIM_Cmd(TIM_TypeDef* TIMx, FunctionalState NewState);
+// @brief 使能中断（对应中断输出控制）
+void TIM_ITConfig(TIM_TypeDef* TIMx, uint16_t TIM_IT, FunctionalState NewState);
+
+
+// @brief 选择内部时钟（走内部时钟模式）
+void TIM_InternalClockConfig(TIM_TypeDef* TIMx);
+// @brief 选择ITRx其他定时器的时钟（ITRx其他定时器 - 外部时钟模式1）
+void TIM_ITRxExternalClockConfig(TIM_TypeDef* TIMx, uint16_t TIM_InputTriggerSource);
+// @brief 选择TIx捕获通道的时钟（GPIO - Tix捕获通道 - 外部时钟模式1）
+void TIM_TIxExternalClockConfig(TIM_TypeDef* TIMx, uint16_t TIM_TIxExternalCLKSource, uint16_t TIM_ICPolarity, uint16_t ICFilter);
+// @brief 选择ETR通过外部时钟模式1输入（GPIO - 外部时钟ETR - 外部时钟模式1）
+void TIM_ETRClockMode1Config(TIM_TypeDef* TIMx, uint16_t TIM_ExtTRGPrescaler, uint16_t TIM_ExtTRGPolarity, uint16_t ExtTRGFilter);
+// @brief 选择ETR通过外部时钟模式2输入（GPIO - 外部时钟ETR - 外部时钟模式2）（不要触发输入的功能的话是等效的）
+void TIM_ETRClockMode2Config(TIM_TypeDef* TIMx, uint16_t TIM_ExtTRGPrescaler, uint16_t TIM_ExtTRGPolarity, uint16_t ExtTRGFilter);
+// @brief 单独配置ETR引脚的预分频器，极性，滤波器这些参数
+void TIM_ETRConfig(TIM_TypeDef* TIMx, uint16_t TIM_ExtTRGPrescaler, uint16_t TIM_ExtTRGPolarity, uint16_t ExtTRGFilter);
+
+// @brief 单独写预分屏值的，可以选择（更新事件生效或者手动主动产生更新事件生效）
+void TIM_PrescalerConfig(TIM_TypeDef* TIMx, uint16_t Prescaler, uint16_t TIM_PSCReloadMode);
+// @brief 自动重装器预装功能配置（要不要影子）
+void TIM_ARRPreloadConfig(TIM_TypeDef* TIMx, FunctionalState NewState);
+// @brief 给计数器写入一个值
+void TIM_SetCounter(TIM_TypeDef* TIMx, uint16_t Counter);
+// @brief 给自动重装器写一个值
+void TIM_SetAutoreload(TIM_TypeDef* TIMx, uint16_t Autoreload);
+// @brief 获取计数器的值
+uint16_t TIM_GetCounter(TIM_TypeDef* TIMx);
+// @brief 获取预分频器的值
+uint16_t TIM_GetPrescaler(TIM_TypeDef* TIMx);
+// @brief 获取标志位和清除标志位的
+ITStatus TIM_GetITStatus(TIM_TypeDef* TIMx, uint16_t TIM_IT);
+
+void TIM_ClearITPendingBit(TIM_TypeDef* TIMx, uint16_t TIM_IT);
+```
+
+1.   配置时基单元（用一个结构体即可）
+2.   配置中断输出控制，允许更新中断输出到NVIC
+3.   配置NVIC，打开定时器中断的通道打开定时器中断的通道，并且分配优先级
+4.   写一个中断函数
+

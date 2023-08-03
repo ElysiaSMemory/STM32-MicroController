@@ -3,6 +3,8 @@
 Recording learning progress of STM32-Microcontroller
 
 -   IDE is Keil uVision 5
+-   Using C language
+-   Using Standard Library
 -   STM32F103C8
 -   There are ``Preview`` in each project folder for preview
 -   Code Comments and Briefs are in English
