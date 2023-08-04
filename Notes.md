@@ -911,6 +911,8 @@ TRGO可以映射内部事件，不仅限于
 
 ![image-20230804012928424](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804012928424.png)
 
+![image-20230804162232327](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804162232327.png)
+
 #### 滤波器的参数
 
 在固定的时钟频率下采样（采样频率f）如果**N个采样都是相同的电平，输出这个东西**，如果不是，输出上一个电平或者默认低电平
