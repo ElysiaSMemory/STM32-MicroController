@@ -1057,3 +1057,168 @@ void TIM_ClearITPendingBit(TIM_TypeDef* TIMx, uint16_t TIM_IT);
 3.   配置NVIC，打开定时器中断的通道打开定时器中断的通道，并且分配优先级
 4.   写一个中断函数
 
+## PWM and OC (Output Compare)
+
+### 简介
+
+<img src="C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804193135850.png" alt="image-20230804193135850" style="zoom:150%;" />![image-20230804193254880](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804193254880.png)
+
+-   CCR就是捕获/比较寄存器（被捕获和比较公用）
+-   CNT被所有的通路公用
+-   （我们设置好CCR）当CNT大于，小于，或者等于CCR时，输出就会是**方波PWM波形**
+
+![image-20230804194044052](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804194044052.png)
+
+高级定时器由死区生成和取反输出的能力（用于三相无刷电机）
+
+### PWM简介
+
+**天下武功，唯快不破**，闪的够快，就看不出来（用于惯性系统）
+
+![image-20230804194539659](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804194539659.png)
+
+-   站空比和实际数值是线性关系
+-   分辨率是占空比变化的精细度
+
+### 输出比较通道（通用定时器）
+
+![image-20230804195350769](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804195350769.png)
+
+-   当CNT和CCR满足大于和等于的情况，输出模式控制器会根据**模式**反转REF信号，此信号通过选择器选择是否取反，然后输出到GPIO上
+-   OC1也是CH1
+
+![image-20230804195457547](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804195457547.png)
+
+-   冻结可以用于：正在输出PWM，突然想要暂停一下
+-   匹配时电平翻转可以输出50%PWM；**输出波形的频率 = 更新频率 / 2**![image-20230804202949802](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804202949802.png)
+
+-   PWM模式2就是PWM模式1输出的取反，只改变了REF的极性而已（后面还有一个取反就是了）
+
+![image-20230804203455203](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804203455203.png)
+
+![image-20230804203817316](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804203817316.png)
+
+-   可见CCR设置的越高，输出的站空比越大
+
+### 参数计算
+
+![image-20230804204330974](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804204330974.png)
+
+-   Reso越小越好
+
+### 输出比较电路（高级）
+
+![image-20230804205252490](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804205252490.png)
+
+两个推挽电路合成**H桥电路**，可以控制正反转，如果有三个即可驱动三相无刷。 因为两极必须互补所以内部两个输出端口就是相反的
+
+![image-20230804205419474](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804205419474.png)
+
+考虑到硬件本身的限制，如果直接切换，有可能导致短路现象。所以**死区生成电路**会在上面关闭时延时一小段时间，再导通下管，反之同理。
+
+### 舵机
+
+![image-20230804210313820](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804210313820.png)
+
+-   SG90型号
+-   50Hz，每个上升沿之间间隔20ms
+-   根据高电平时间来调整角度，线性分配
+
+![image-20230804210322710](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804210322710.png)
+
+-   PWM信号输入到控制板，给控制板一个指定的目标角度
+-   然后电位器检测当前输出轴的角度
+-   如果大于目标或者小于目标电机会对应的正反转调整角度
+
+![image-20230804211020258](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804211020258.png)
+
+### 直流电机和驱动电路
+
+-   130直流电机
+
+![image-20230804211522702](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804211522702.png)
+
+-   H桥可以控制电流流过的方向，所以可以控制正反转
+
+![image-20230804211642704](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230804211642704.png)
+
+-   VM电机驱动模块驱动电源。一般和电机电源同样
+-   VCC逻辑电平输入端。和控制器一致
+-   三个GND随便选一个即可
+-   灰色填充是对应关系
+-   PWMA接PWM信号输出端
+-   其他可以接任意接口(控制见表格)
+    -   确认方向后，转还是制动就看PWM了
+-   STBY是待机，GND不工作，VCC工作
+
+手册14单元。
+
+### 编程相关
+
+1.   RCC时钟开启要使用的TIM外设和GPIO外设时钟
+2.   配置时基单元
+3.   配置输出比较单元
+4.   配置GPIO，初始化为**复用推挽输出** ···· GPIO_Mode_AF_PP
+5.   运行控制，启动计数器
+
+```c
+// @brief 配置输出比较
+void TIM_OC1Init(TIM_TypeDef* TIMx, TIM_OCInitTypeDef* TIM_OCInitStruct);
+void TIM_OC2Init(TIM_TypeDef* TIMx, TIM_OCInitTypeDef* TIM_OCInitStruct);
+void TIM_OC3Init(TIM_TypeDef* TIMx, TIM_OCInitTypeDef* TIM_OCInitStruct);
+void TIM_OC4Init(TIM_TypeDef* TIMx, TIM_OCInitTypeDef* TIM_OCInitStruct);
+// @brief 输出比较的结构体默认赋值
+void TIM_OCStructInit(TIM_OCInitTypeDef* TIM_OCInitStruct);
+
+// @brief 配置强制输出模式：运行中想要暂停并且强制输出高低电平
+void TIM_ForcedOC1Config(TIM_TypeDef* TIMx, uint16_t TIM_ForcedAction);
+void TIM_ForcedOC2Config(TIM_TypeDef* TIMx, uint16_t TIM_ForcedAction);
+void TIM_ForcedOC3Config(TIM_TypeDef* TIMx, uint16_t TIM_ForcedAction);
+void TIM_ForcedOC4Config(TIM_TypeDef* TIMx, uint16_t TIM_ForcedAction);
+
+// @brief 配置CCR（当CNT大于，小于，或者等于CCR时）的影子寄存器（预装功能）
+void TIM_OC1PreloadConfig(TIM_TypeDef* TIMx, uint16_t TIM_OCPreload);
+void TIM_OC2PreloadConfig(TIM_TypeDef* TIMx, uint16_t TIM_OCPreload);
+void TIM_OC3PreloadConfig(TIM_TypeDef* TIMx, uint16_t TIM_OCPreload);
+void TIM_OC4PreloadConfig(TIM_TypeDef* TIMx, uint16_t TIM_OCPreload);
+
+// @brief 配置快速使能，用的不多
+void TIM_OC1FastConfig(TIM_TypeDef* TIMx, uint16_t TIM_OCFast);
+void TIM_OC2FastConfig(TIM_TypeDef* TIMx, uint16_t TIM_OCFast);
+void TIM_OC3FastConfig(TIM_TypeDef* TIMx, uint16_t TIM_OCFast);
+void TIM_OC4FastConfig(TIM_TypeDef* TIMx, uint16_t TIM_OCFast);
+
+// @brief 不用的
+void TIM_ClearOC1Ref(TIM_TypeDef* TIMx, uint16_t TIM_OCClear);
+void TIM_ClearOC2Ref(TIM_TypeDef* TIMx, uint16_t TIM_OCClear);
+void TIM_ClearOC3Ref(TIM_TypeDef* TIMx, uint16_t TIM_OCClear);
+void TIM_ClearOC4Ref(TIM_TypeDef* TIMx, uint16_t TIM_OCClear);
+
+// @brief 单独设置极性，结构体内也是一样的
+void TIM_OC1PolarityConfig(TIM_TypeDef* TIMx, uint16_t TIM_OCPolarity);
+void TIM_OC1NPolarityConfig(TIM_TypeDef* TIMx, uint16_t TIM_OCNPolarity);
+void TIM_OC2PolarityConfig(TIM_TypeDef* TIMx, uint16_t TIM_OCPolarity);
+void TIM_OC2NPolarityConfig(TIM_TypeDef* TIMx, uint16_t TIM_OCNPolarity);
+void TIM_OC3PolarityConfig(TIM_TypeDef* TIMx, uint16_t TIM_OCPolarity);
+void TIM_OC3NPolarityConfig(TIM_TypeDef* TIMx, uint16_t TIM_OCNPolarity);
+void TIM_OC4PolarityConfig(TIM_TypeDef* TIMx, uint16_t TIM_OCPolarity);
+
+// @brief 单独修改输出使能参数
+void TIM_CCxCmd(TIM_TypeDef* TIMx, uint16_t TIM_Channel, uint16_t TIM_CCx);
+void TIM_CCxNCmd(TIM_TypeDef* TIMx, uint16_t TIM_Channel, uint16_t TIM_CCxN);
+
+// @brief 单独修改输出比较模式的函数
+void TIM_SelectOCxM(TIM_TypeDef* TIMx, uint16_t TIM_Channel, uint16_t TIM_OCMode);
+
+// @brief 单独修改CCR寄存器(站控比)的函数（重要）
+void TIM_SetCompare1(TIM_TypeDef* TIMx, uint16_t Compare1);
+void TIM_SetCompare2(TIM_TypeDef* TIMx, uint16_t Compare2);
+void TIM_SetCompare3(TIM_TypeDef* TIMx, uint16_t Compare3);
+void TIM_SetCompare4(TIM_TypeDef* TIMx, uint16_t Compare4);
+
+// @brief 高级定时器必用
+void TIM_CtrlPWMOutputs(TIM_TypeDef* TIMx, FunctionalState NewState);
+
+```
+
+![image-20230805004219197](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230805004219197.png)
