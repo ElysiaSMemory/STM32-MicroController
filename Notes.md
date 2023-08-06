@@ -1222,3 +1222,32 @@ void TIM_CtrlPWMOutputs(TIM_TypeDef* TIMx, FunctionalState NewState);
 ```
 
 ![image-20230805004219197](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230805004219197.png)
+
+注意，如果要给不同电机不同的PWM只需要使用 不同的通道即可
+
+#### 参数计算
+
+-   舵机要求周期是20ms，频率就是1/20ms = 50Hz
+-   可以选择合适的PSC和ARR，这里用72和20000
+
+![image-20230806211340142](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230806211340142.png)
+
+### 引脚重映射
+
+![image-20230805164747161](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230805164747161.png)
+
+**关闭本身的复用**
+
+```c
+RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
+
+GPIO_PinRemapConfig(GPIO_PartialRemap1_TIM2, ENABLE); // Change PA0 to PA15
+	GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable, ENABLE);
+
+// 参考引脚定义图确定用哪一个
+GPIO_Remap_SWJ_NoJTRST
+GPIO_Remap_SWJ_JTAGDisable
+GPIO_Remap_SWJ_Disable // 小心
+```
+
+![image-20230805165157351](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230805165157351.png)
