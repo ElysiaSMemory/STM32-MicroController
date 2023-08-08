@@ -1214,8 +1214,11 @@ void TIM_SelectOCxM(TIM_TypeDef* TIMx, uint16_t TIM_Channel, uint16_t TIM_OCMode
 void TIM_SetCompare1(TIM_TypeDef* TIMx, uint16_t Compare1);
 void TIM_SetCompare2(TIM_TypeDef* TIMx, uint16_t Compare2);
 void TIM_SetCompare3(TIM_TypeDef* TIMx, uint16_t Compare3);
-void TIM_SetCompare4(TIM_TypeDef* TIMx, uint16_t Compare4);
+void TIM_SetCompare4(TIM_TypeDef* TIMx, uint16_t Compare4);\
 
+ // @brief 单独修改PSC寄存器(预分频)的函数（重要）
+void TIM_PrescalerConfig(TIM_TypeDef* TIMx, uint16_t Prescaler, uint16_t TIM_PSCReloadMode);
+    
 // @brief 高级定时器必用
 void TIM_CtrlPWMOutputs(TIM_TypeDef* TIMx, FunctionalState NewState);
 
@@ -1251,3 +1254,172 @@ GPIO_Remap_SWJ_Disable // 小心
 ```
 
 ![image-20230805165157351](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230805165157351.png)
+
+## 输入捕获 Input Capture
+
+![image-20230807232309807](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230807232309807.png)
+
+-   指定电平跳变上下沿，把CNT的值写入到CCR中
+-   CCR就是捕获/比较寄存器（被捕获和比较公用）
+
+![image-20230807232813877](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230807232813877.png)
+
+-   类似于外部中断，但是这里执行的是控制后续电路
+
+### 测频率的方法
+
+#### 测频法
+
+![image-20230808183518182](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230808183518182.png)![image-20230808183638967](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230808183638967.png)
+
+-   一般我们使用周期为1S，每来一个上升沿就是一个周期，计数+1；结果直接单位Hz
+-   适合**测量高频**信号
+-   得到的是**平均频率**，结果更新慢
+-   实现方法，美来一次计次加一，然后定时器设定一秒中断，每次取值然后清零
+
+#### 测周法
+
+![image-20230808201706485](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230808201706485.png)![image-20230808201033139](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230808201033139.png)
+
+-   捕获两个上升沿，测量两个之间的时间。
+-   测量时间的也是用计数器，使用已知频率f~c~（假设单位时间内发生一次）计次，记一次的时间是T = 1 / f~c~ ，记N个数的时间就是N / f~c~；这个时候取倒数就是频率
+-   适合**测量低频信号**，更适合宝宝体质
+-   出**结果速度快**，更新更快，受到噪声影响较大
+
+#### 中界频率
+
+-   前两种**N越大误差越小**，不一定每个周期信号都是完整的（正负一误差）
+-   把两个方法的N相等，把f~x~解出来，就得到中界频率f~m~
+    -   **如果待测信号 > 中界频率，用测频法**
+    -   **如果待测信号 < 中界频率，用测周法**
+
+### 基本电路
+
+![image-20230808203741451](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230808203741451.png)
+
+-   输入引脚参考引脚定义表格
+-   通过**异或**，三个输入引脚有任何一个翻转时。输出引脚产生一次电平翻转（**输入有单数1则为1，双数1为0**）
+    -   本设计主要服务于**三相无刷电机**，三个霍尔传感器检测转子的位置，根据转子的位置进行换向
+    -   作为无刷电机的接口定时器，驱动换向电路
+-   输入滤波器过滤毛刺信号，边沿检测器和外部中断相似
+    -   此处的输出可以选择交叉也可以选择各走各的（CH2给1，CH1给2）
+    -   灵活**切换**后续输入，可以**一个引脚输入到两个捕获单元**
+        -   上捕获周期（上升触发），下捕获站空比（下降触发）
+-   捕获瞬间触发CNT写入CCR，同时至flag，可以开启**捕获中断**
+-   **总结：上升沿触发捕获，CNT用于计数记时，存在CCR内N，驱动时钟就是f~c~**
+    -   捕获后**自动清零用主从触发模式**
+
+#### 细化结构
+
+![image-20230808204757715](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230808204757715.png)
+
+-   f~DTS~ 是滤波器采样时钟来源，CCMR1的ICF位控制滤波器参数
+    -   **固定频率采样：**连续N个都是高才是高，连续N个低才是低。高频抖动输出不变N越大滤波越强
+
+![image-20230808204246987](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230808204246987.png)
+
+-   CC1S可以选择数据选择器，ICPS位配置分频器，CC1E控制使能
+
+### 主从触发模式
+
+![image-20230808211802179](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230808211802179.png)
+
+**主模式**：定时器内部信号映射到TRGO引脚，用于触发别的外设
+**从模式**：接收其他外设或者自身外设的一些信号，用于控制自身定时器的运行（被别的信号控制）
+
+-   **触发源选择**一个指定的信号，得到TRGI，TRG触发从模式，选择一个操作自动执行
+
+![image-20230808211912895](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230808211912895.png)![image-20230808211951059](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230808211951059.png)
+
+详细见手册
+
+<img src="C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230808212048924.png" alt="image-20230808212048924"  />![image-20230808212131467](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230808212131467.png)![image-20230808212139377](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230808212139377.png)
+
+### 输入捕获基本逻辑结构图
+
+#### 仅频率
+
+![image-20230808212614816](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230808212614816.png)
+
+-   TI1FP1走两条路，**直连通道**和**主从模式触发**信号
+-   先读取CNT的值再清零（或者非阻塞的同时）
+-   CCR1内就是N，用于计算频率
+-   ARR一般设置为65535，CNT同理，**注意信号频率太低会导致溢出**
+-   触发源选择只有``TI1FP1``和``TI2FP2``**自动清零只能用通道一二**，其他需要捕获中断手动清零
+
+#### PWMI
+
+![image-20230808213821342](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230808213821342.png)
+
+-   **两个通道同时**捕获一个引脚
+-   下降沿捕获的CNT是**高点平期间的计数值**，不触发清零
+-   **CCR2 / CCR1 就是占空比**
+
+![image-20230808213905399](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230808213905399.png)
+
+### 手册
+
+-   14.3.5
+-   14.3.6
+
+![image-20230808214019978](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230808214019978.png)
+
+-   14.3.15 主从模式
+
+#### 编程相关
+
+1.   RCC开启时钟，GPIO和TIM时钟打开
+2.   GPIO初始化，把GPIO配置输入模式（上拉或者浮空）
+3.   配置时基单元，让CNT自增
+4.   配置输入捕获单元，滤波器，极性，直连/交叉，分频器
+5.   选择从模式触发源TI1FP1
+6.   选择触发后的操作RESET
+7.   调用TIM_CMD启用定时器
+8.   需要读取时，直接读取CCR寄存器，用f~c~ / N计算即可
+
+```c
+// @brief 结构体配置输入捕获单元
+void TIM_ICInit(TIM_TypeDef* TIMx, TIM_ICInitTypeDef* TIM_ICInitStruct);
+
+// @brief 结构体配置输入捕获单元，配置两个通道，快速，配置成PWMI模式
+void TIM_PWMIConfig(TIM_TypeDef* TIMx, TIM_ICInitTypeDef* TIM_ICInitStruct);
+
+// @brief 给初始化结构体赋予初始值
+void TIM_ICStructInit(TIM_ICInitTypeDef* TIM_ICInitStruct);
+
+// @brief 选择输入触发源（从模式的触发源选择）
+void TIM_SelectInputTrigger(TIM_TypeDef* TIMx, uint16_t TIM_InputTriggerSource);
+
+// @brief 选择输出触发源TRGO（主模式输出的触发源）
+void TIM_SelectOutputTrigger(TIM_TypeDef* TIMx, uint16_t TIM_TRGOSource);
+
+
+// @brief 选择从模式（从模式做什么）
+void TIM_SelectSlaveMode(TIM_TypeDef* TIMx, uint16_t TIM_SlaveMode);
+
+// @brief 分别：配置通道的分频器
+void TIM_SetIC1Prescaler(TIM_TypeDef* TIMx, uint16_t TIM_ICPSC);
+void TIM_SetIC2Prescaler(TIM_TypeDef* TIMx, uint16_t TIM_ICPSC);
+void TIM_SetIC3Prescaler(TIM_TypeDef* TIMx, uint16_t TIM_ICPSC);
+void TIM_SetIC4Prescaler(TIM_TypeDef* TIMx, uint16_t TIM_ICPSC);
+
+// @brief 分别：读取四个通道的CCR
+uint16_t TIM_GetCapture1(TIM_TypeDef* TIMx);
+uint16_t TIM_GetCapture2(TIM_TypeDef* TIMx);
+uint16_t TIM_GetCapture3(TIM_TypeDef* TIMx);
+uint16_t TIM_GetCapture4(TIM_TypeDef* TIMx);
+
+```
+
+#### 性能
+
+-   标准频率 / 计数器最大值 = 最小可以测量的频率
+    -   1M / 65535 ~ 15Hz
+    -   加大预分频，标准频率变低，可以测量更低的频率
+-   最大频率没有明确上线，误差只会越来越大
+    -   不要超过标准频率
+    -   看误差要求： 标准频率 / 误差要求的10次方值
+    -   降低PSC，提高标准频率就可提高上限
+    -   考虑测频法
+-   误差分析
+    -   实际测量还有晶振误差，误差积累会造成问题
