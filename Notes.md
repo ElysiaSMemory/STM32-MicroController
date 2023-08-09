@@ -1423,3 +1423,98 @@ uint16_t TIM_GetCapture4(TIM_TypeDef* TIMx);
     -   考虑测频法
 -   误差分析
     -   实际测量还有晶振误差，误差积累会造成问题
+
+## TIM编码器接口Encoder Interface
+
+### 简介
+
+![image-20230809201538701](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230809201538701.png)
+
+-   编码器两个输出，A和B，接入STM32的编码器接口，编码器接口自动控制时基单元中的CNT计数器进行++或者--
+    -   比如初始化后，CNT为0，每次右转产生脉冲，CNT增加一次， 每次左转产生脉冲，CNT减少一次（可以加减的外部时钟）
+-   每隔一段时间取出一次CNT，得到的值就是编码器的速度
+    -   **测频法测正交脉冲的频率**
+
+### 正交编码器
+
+正交信号：精度更高，计次频率高，抗噪声
+
+![image-20230809215939600](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230809215939600.png)
+
+-   正转时，A相提前B相90度
+-   反转时，A相滞后B相90度
+
+![image-20230809220402393](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230809220402393.png)![image-20230809220621681](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230809220621681.png)
+
+**设计逻辑**就是
+
+-   把A和B的所有边沿作为计数器的计数时钟
+-   出现边缘信号时++或者--
+-   计数方向由另一项的高低电平决定
+
+### 硬件电路框图
+
+![image-20230809220915513](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230809220915513.png)
+
+-   输入部分：要借用输入捕获的两个引脚，CH1和CH2的引脚
+-   输出部分：相当于从模式控制器，控制CNT的计数时钟和方向（按照刚才的表）
+-   计数时钟和方向都处于编码器接口托管的状态
+
+![image-20230809221438442](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230809221438442.png)
+
+#### 框图
+
+![image-20230809221614600](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230809221614600.png)
+
+-   编码器接口通过预分频器控制CNT计数器的时钟，同时编码器接口控制计数方向
+-   一般设置ARR为65535，最大值
+    -   因为65534， 65535， 0， 1， 2的顺序，会被补码直接转换成负数（方便）
+
+### 编码器工作模式表格及案例
+
+-   一开始讲的对应的是第三个模式
+-   我们可以考虑忽略一些上升沿，减少增减的频率，仅在A或者B的边沿计数，**但是会损失精度**，计数频率低了
+-   正转都是向上计数，反转都是向下计数
+
+![image-20230809223348788](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230809223348788.png)
+
+#### 案例1
+
+![image-20230809224057020](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230809224057020.png)
+
+-   注意毛刺部分，因为上下沿的逻辑，“一个腿走路，另一条腿不动的时候”，会重复加减加减来回摆动，**计数值不变**
+
+![image-20230809224237716](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230809224237716.png)
+
+#### 案例2
+
+-   TI1反向
+
+![image-20230809224439721](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230809224439721.png)
+
+-   输入捕获模式下，极性选择，是选择上升沿有效还是下降沿有效的，这里变成了**控制极性了**
+-   把TI1高低电平先取反，然后查表
+
+![image-20230809224629788](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230809224629788.png)
+
+### 手册
+
+-   14.3.12
+
+#### 编程相关
+
+1.   开启RCC时钟，开启GPIO和定时器时钟
+2.   配置GPIO输入模式
+3.   配置时基单元，不分频，自动重装65535
+4.   配置输入捕获单元，只有滤波器和极性有效，后面的与编码器无关
+5.   配置编码器接口模式
+6.   调用TIM_Cmd启动定时器
+7.   读取CNT的值来测量位置
+8.   每隔一段固定时间取出一次CNT然后清零，测频法测量速度
+
+```c
+// @brief 定时器编码器接口设置
+void TIM_EncoderInterfaceConfig(TIM_TypeDef* TIMx, uint16_t TIM_EncoderMode, uint16_t TIM_IC1Polarity, uint16_t TIM_IC2Polarity);
+
+```
+
