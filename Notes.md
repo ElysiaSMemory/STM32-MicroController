@@ -1518,3 +1518,278 @@ void TIM_EncoderInterfaceConfig(TIM_TypeDef* TIMx, uint16_t TIM_EncoderMode, uin
 
 ```
 
+## ADC 模数转换
+
+#### 简介
+
+![image-20230810154329499](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810154329499.png)
+
+-   分辨率: 几位：12位就是0 ~ 4095
+-   转换频率：开始到结束需要1us，也就是1MHz
+-   0-3.3V 线性映射到 0-4095
+-   内部信号源是内部温度传感器（CPU温度）和内部参考电压（1.2V基准电压，不变化）
+-   普通ADC是：启动，读值，再启动，读值
+-   ST的ADC： 列一个组，一次性启动一个组，连续转换多个值
+    -   规则组：常规时间
+    -   注入组：突发事件
+-   **模拟看门狗**可以设定阈值，当AD突破阈值就可以申请中断
+
+### 逐次逼近ADC
+
+ADC0809内部结构图
+
+![image-20230810170424657](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810170424657.png)
+
+-   **模拟信号线路选择器**：从ADDA，ADDB，ADDC选择线路，ALE给锁存信号，选择从IN的其中一路进行输入
+-   STM32内部由18个输入通道，18路开关
+-   **电路比较器**：发送数据给DAC（内部加权电阻网络，见51单片机），输出模拟电压
+    -   DAC输出电压已知，外部输入电压未知
+    -   同时输入电路比较器进行**大小判断**
+    -   调整DAC知道和外面近似相等
+    -   通常使用**二分法**，**逐次逼近**相当于从高位到低二进制位判断是1还是0的方式（判断#位次）
+-   START是开始转换，EOC是指示结束，CLK是时钟推动过程
+-   Vref是DAC参考电压，同时也决定了ADC的范围（255对应5V还是3.3V呢）
+    -   一般VCC和GND都和这两个接在一起
+
+### STM32ADC框图
+
+![image-20230810171146569](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810171146569.png)
+
+-   总共16 + 2个输入通道
+-   模拟多路开关指定选择通道，然后进入模数转换器（逐次比较）
+-   然后结果被放在数据寄存器内，读取即可
+-   参考之前的信息，这里由两种模式的通道，**注入通道和规则通道**
+    -   之前说的普通模式是点一个菜，这里说的是一次性点16个菜，老板按照顺序依次做好端上来
+    -   **规则组**菜单可以一次性上16个菜（只有**一个**16位寄存器，桌子小，需要配合**DMA**实现（数据转运小帮手，转移菜））
+    -   **注入组**比较高级，VIP作为可以全部上，4个寄存器
+
+![image-20230810171615318](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810171615318.png)
+
+-   接下来的是START开始信号相关
+    -   可以由软件触发
+    -   可以由**硬件触发**TIM的CH，TRGO，因为**ADC一般固定要每隔一段时间转换依次**
+        -   比如选择TIM3的更新时间是TRGO输出，然后设置好ADC开始信号对应，就可以自动触发了
+
+![image-20230810171835561](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810171835561.png)![image-20230810171854942](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810171854942.png)
+
+-   ADC的电源和参考电压部分
+
+![image-20230810172008995](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810172008995.png)![image-20230810172134294](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810172134294.png)
+
+-   ADC的时钟部分来源是RCC
+-   ADC分频只能选择6分频12M，和8分屏9M
+
+-   DMA请求后面会说
+
+![image-20230810172752308](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810172752308.png)
+
+-   看门狗启动，并且指定看门通道。一旦超过阈值范围，就会开始乱叫，**触发中断**
+-   同时EOC和JEOC是两个寄存器的完成flag，可以用使能控制是否申请中断
+
+### 基本结构图
+
+![image-20230810173019176](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810173019176.png)
+
+### 输入通道对应的GPIO
+
+![image-20230810204846280](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810204846280.png)
+
+-   表格内查询``ADC12_INx``（ADC1和ADC2公用引脚）
+    -   只有0~9十个外部输入通道
+-   ADC2用于双ADC模式，一起工作，配合组成同步和交叉模式（交叉采样，提高频率，类比左右出拳）
+
+### 转换模式（转换，扫描模式）
+
+#### 单次转换，非扫描模式
+
+-   仅**序列1**有效，简单的选择一个，在序列1的位置指定我们想要转换的通道
+-   转换结果放在数据寄存器内，同时EOC标志位至一
+-   如果判断EOC转换完了，就可以读结果了
+-   然后**再次手动触发请求转换**
+
+![image-20230810210418193](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810210418193.png)
+
+#### 连续转换，非扫描模式
+
+-   仍然只用第一个
+-   不同在于在第一次转换后**不需要手动触发**，会自动触发下一轮转换
+-   可以直接从数据寄存器读数
+
+![image-20230810210905608](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810210905608.png)
+
+#### 单词转换，扫描模式
+
+-   也是单次转换，每触发一次结束后都会停下来，**需要手动触发下一次**
+-   扫描模式，相当于允许菜单点菜了，通道可以任意指定（需要设定通道数目的参数）
+-   每次触发后**依次**对N个位置进行转换
+-   结果都在数据寄存器内
+-   **需要DMA把数据挪走**
+-   全部N个完成后产生EOC信号，转换结束
+-   然后触发下一次
+
+![image-20230810210927241](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810210927241.png)
+
+#### 连续转换，扫描模式
+
+-   和上面类似，只不过立刻开始下一次的转换
+-   类似套路
+
+![image-20230810211017139](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810211017139.png)
+
+#### 间断模式
+
+-   每隔几个扫描，暂停一下，需要再触发一次
+
+### 触发控制（何时启动转换）
+
+![image-20230810211154208](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810211154208.png)
+
+### 数据对齐
+
+-   因为是12位，我们有16位，考虑左右对齐
+
+![image-20230810211238813](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810211238813.png)
+
+-   一般使用右对齐，直接就是转换结果
+-   左对齐直接大16倍
+    -   如果**不需要高分辨率**可以直接拿高8位，编程8位ADC
+
+### 转换时间
+
+-   只有在需要高频率才会考虑
+-   厨子做菜需要一段时间才能上菜
+-   采样开关会打开，然后断开，进行AD转换，防止电压变化导致无法定位
+    -   这就是**采样保持时间**
+
+![image-20230810211708319](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810211708319.png)
+
+### 校准
+
+![image-20230810211813732](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810211813732.png)
+
+-   固定的，加几条代码即可
+
+### 外围电路
+
+![image-20230810212439816](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230810212439816.png)
+
+1.   电位器（滑动端），可以输出0 ~ 3.3V的电压
+     -   一般要KOhm级别的电阻
+2.   下面的是传感器电阻等等，**等效可变电阻**。电阻阻值没法测量，所以和固定电阻**串联分压**，反应电阻值电压的电路
+     -   传感器阻值变小，下拉强，电压低
+     -   传感器阻值变大，上拉强，电压高
+     -   位置可换，一般要求固定电阻和可变电阻差不多
+3.   简易电压转换电路：电阻分压，中间的电压是Vin/R1*R2
+
+### 手册内容
+
+-   11
+
+### 编程相关
+
+![image-20230811162539204](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230811162539204.png)
+
+1.   开启RCC时钟，ADC和GPIO时钟
+2.   ADCCLK分频器配置
+3.   配置GPIO为**模拟输入模式**
+4.   配置模拟开关，接入到规则组内
+5.   配置ADC转换器，结构体完成
+     1.   配置模拟看门狗，用ITConfig开启对应的中断输出
+     2.   NVIC配置优先级
+6.   开关控制，开启ADC_Cmd
+7.   进行校准
+8.   函数读取转换结果和触发转换
+
+```c
+// @biref 配置ADCCLK分频器的，选择2，4，6，8分频
+void RCC_ADCCLKConfig(uint32_t RCC_PCLK2);
+
+// @biref 回复缺省配置
+void ADC_DeInit(ADC_TypeDef* ADCx);
+
+// @biref 初始化
+void ADC_Init(ADC_TypeDef* ADCx, ADC_InitTypeDef* ADC_InitStruct);
+
+// @biref 结构体初始化
+void ADC_StructInit(ADC_InitTypeDef* ADC_InitStruct);
+
+// @biref 开关控制
+void ADC_Cmd(ADC_TypeDef* ADCx, FunctionalState NewState);
+
+// @biref 开启DMA转运数据，需要转运就要调用这个 
+void ADC_DMACmd(ADC_TypeDef* ADCx, FunctionalState NewState);
+
+// @biref 中断输出控制，是否通往NVIC
+void ADC_ITConfig(ADC_TypeDef* ADCx, uint16_t ADC_IT, FunctionalState NewState);
+
+// @biref 复位校准
+void ADC_ResetCalibration(ADC_TypeDef* ADCx);
+
+// @biref 获取复位校准状态
+// 由软件设置硬件清除，软件置1，开始校准，校准完毕硬件自动清零
+FlagStatus ADC_GetResetCalibrationStatus(ADC_TypeDef* ADCx);
+
+// @biref 开始校准
+void ADC_StartCalibration(ADC_TypeDef* ADCx);
+
+// @biref 获取开始校准状态
+FlagStatus ADC_GetCalibrationStatus(ADC_TypeDef* ADCx);
+
+// @biref 软件开始转换控制，软件触发转换
+void ADC_SoftwareStartConvCmd(ADC_TypeDef* ADCx, FunctionalState NewState);
+
+// @biref 返回SWSTART的状态，这个东西在转换开始后马上就清零了，和//转换是否结束毫无关系//
+FlagStatus ADC_GetSoftwareStartConvStatus(ADC_TypeDef* ADCx);
+
+// @biref 间断模式：每隔几个通道间断一次
+void ADC_DiscModeChannelCountConfig(ADC_TypeDef* ADCx, uint8_t Number);
+
+// @biref 间断模式：是否启用
+void ADC_DiscModeCmd(ADC_TypeDef* ADCx, FunctionalState NewState);
+
+// @biref ADC规则组通道配置：给菜单填写菜品通道
+void ADC_RegularChannelConfig(ADC_TypeDef* ADCx, uint8_t ADC_Channel, uint8_t Rank, uint8_t ADC_SampleTime);
+
+// @biref ADC外部触发转换控制：是否允许外部触发转换
+void ADC_ExternalTrigConvCmd(ADC_TypeDef* ADCx, FunctionalState NewState);
+
+// @biref ADC获取转换值：获取数据寄存器内的结果
+uint16_t ADC_GetConversionValue(ADC_TypeDef* ADCx);
+
+// @biref ADC获取双模式转换值：获取数据寄存器内的结果
+uint32_t ADC_GetDualModeConversionValue(void);
+
+// @biref 模拟看门狗是否启动
+void ADC_AnalogWatchdogCmd(ADC_TypeDef* ADCx, uint32_t ADC_AnalogWatchdog);
+
+// @biref 配置看门狗阈值
+void ADC_AnalogWatchdogThresholdsConfig(ADC_TypeDef* ADCx, uint16_t HighThreshold, uint16_t LowThreshold);
+
+// @biref 配置看门通道
+void ADC_AnalogWatchdogSingleChannelConfig(ADC_TypeDef* ADCx, uint8_t ADC_Channel);
+
+// @biref 开启内部的那两个通道
+void ADC_TempSensorVrefintCmd(FunctionalState NewState);
+
+// @biref 获取标志位状态：获取完成转换标志位：参数给EOC就可以判断EOC了，如果是1那就是结束了
+FlagStatus ADC_GetFlagStatus(ADC_TypeDef* ADCx, uint8_t ADC_FLAG);
+
+// @biref 清除标志位状态,1是结束，软件清除或者读取ADC_DR清除
+void ADC_ClearFlag(ADC_TypeDef* ADCx, uint8_t ADC_FLAG);
+
+// @biref 获取中断状态
+ITStatus ADC_GetITStatus(ADC_TypeDef* ADCx, uint16_t ADC_IT);
+
+// @biref 清除中断挂起位
+void ADC_ClearITPendingBit(ADC_TypeDef* ADCx, uint16_t ADC_IT);
+
+```
+
+### 其他信息
+
+-   在阈值这方面为了防止抖动可以设计一个上下错开阈值，中间是需要的值（施密特触发器，迟滞比较）
+    -   低于下阈值开灯，高于上阈值关灯
+
+![image-20230811202608577](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230811202608577.png)
+
+-   也可以滤波，均值滤波，裁剪分辨率去掉尾数
