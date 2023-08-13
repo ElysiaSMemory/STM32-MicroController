@@ -1975,6 +1975,8 @@ ITStatus DMA_GetITStatus(uint32_t DMAy_IT);
 // @brief 清除中断挂起位
 void DMA_ClearITPendingBit(uint32_t DMAy_IT);
 
+// @brief 开启ADC DMA通道
+void ADC_DMACmd()
 
 ```
 
