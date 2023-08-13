@@ -1793,3 +1793,190 @@ void ADC_ClearITPendingBit(ADC_TypeDef* ADCx, uint16_t ADC_IT);
 ![image-20230811202608577](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230811202608577.png)
 
 -   也可以滤波，均值滤波，裁剪分辨率去掉尾数
+
+## DMA 直接储存器获取
+
+![image-20230812230343746](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230812230343746.png)
+
+-   通道就是数据转运的路径，各个通道间互不干扰
+-   如果是内部储存器之间的转运，DMA可以直接一股脑全部搞进来，**软件触发**
+-   如果是和外设的话，需要遵守外设对应的时机**硬件触发**
+    -   比如，ADC转换完成后硬件触发DMA转运
+
+### 存储器映像
+
+**程序储存器FLASH**：启示地址开始后，每个字节依次增长占领不同的地址。终止地址取决于容量。
+**系统存储器**：在ROM最后面。Bootloader是出场写好的
+**选项字节**：在ROM最后面。存储Flash的读写保护，看门狗等等
+
+**运行内存**：程序中定义变量数组结构体等等，类比内存条
+**外设寄存器**： 初始化读写的东西
+**内核外设寄存器**： NVIC， SysTICK
+
+![image-20230812230818004](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230812230818004.png)
+
+-   存储器的内容和地址都很重要
+-   ALU和控制都统称CPU
+-   ROM掉电不丢失，RAM掉电丢失
+
+32位有大约4GB的寻址空间，所以大部分都是灰色的保留区间
+
+![image-20230812232014209](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230812232014209.png)
+
+0地址处写的是“别名到Flash或者系统储存器，取决于BOOT的引脚”
+
+-   所以我们需要把需要执行的程序映射到0地址去。看是从Flash或者系统储存器或SRAM启动
+
+![image-20230812232156733](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230812232156733.png)
+
+![image-20230812232218071](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230812232218071.png)
+
+![image-20230812232236567](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230812232236567.png)
+
+### DMA框图
+
+![image-20230812234534279](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230812234534279.png)
+
+-   除了CPU都可以看成外设
+-   寄存器可以被读取和写入，同时可以用于改变硬件接线状态（开关，数据选择器，计数器，数据寄存器，桥梁）
+-   **总线矩阵的左边是主动单元**，可以访问寄存器；被动单元只能被读写
+    -   DCode是访问Flash（默认只读）的
+    -   系统总线访问其他
+-   主动单元除了内核CPU就是**DMA总线**（有三根）
+-   DMA内部的通道可以分别设置源地址和目标地址
+-   **DMA仲裁器**，本质要求分时复用，如果产生冲突，仲裁器根据通道优先级决定谁先
+-   **总线仲裁器**（总线矩阵内）DMA和CPU冲突时，暂停CPU（仅一半带宽）
+-   **AHB**从设备：DMA自己的寄存器
+-   DMA请求：DMA硬件触发源
+
+### DMA基本结构总结
+
+![image-20230812235908413](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230812235908413.png)
+
+-   注意不可以SRAM到Flash和Flash到Flash，因为Flash是只读的
+-   外设和存储器的**起始地址**决定数据从哪里来哪里去
+    -   如果要存储器到存储器，要把一个存储器的地址放在**外设的起始地址**站点
+-   **数据宽度**：指定依次转运多大的数据宽度
+    -   Byte			uint8_t
+    -   HalfWord    uint16_t
+    -   Word          uint32_t
+-   **地址自增**：是否去下一个寄存器
+    -   外设不要
+    -   存储器，需要，**需要往后挪坑**
+-   **传输计数器**：需要转运计次？自减寄存器
+    -   完成后自增地址会回到**起始地址**，方便下一轮
+-   **自动重装器**：决定转运模式，残次还是循环（ADC连续模式）
+-   **M2M**：选择是用硬件触发还是软件触发
+    -   软件触发：最快速度连续不断触发DMA，直到传输计数器清零（不可以和自动重装复用）**存储器到存储器使用**
+    -   硬件触发：ADC串口定时器， 与外设有关，需要特殊时机，达到时机触发DMA
+-   DMA_Cmd开启转运
+    1.   开关控制
+    2.   传输计数器大于0
+    3.   触发源头有信号
+-   传输寄存器=0而且没有自动重装时，**需要关闭DMA** DIABLE，再填充传输寄存器
+
+### DMA请求
+
+![image-20230813001255779](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230813001255779.png)
+
+-   硬件对应自己不同的 通道；软件随意
+-   用硬件库内的ADC_CMD开启。一般只开启一个
+-   通道号越小优先级越高
+
+### DMA 数据对齐
+
+![image-20230813001720006](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230813001720006.png)
+
+-   目标宽度大，在前面补0
+-   目标宽度小，舍弃多出来的高位
+
+![image-20230813001727983](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230813001727983.png)
+
+### 例：数据转运+DMA
+
+![image-20230813002608160](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230813002608160.png)
+
+-   外设站点地址填写：数组A的首地址
+-   存储器站点地址填写：数组B的首地址
+-   宽度都是8，**字节传输**
+-   方向：**外设到存储器**
+-   **所有站点地址要自增**，传输计数器设置7，不要自动重装
+-   软件触发
+-   使能DMA
+-   相当于复制
+
+### 例：ADC扫描模式+DMA
+
+
+
+-   我们需要在每个单独的通道完整转换后，进行DMA数据转运，并且目的地地址自增
+-   外设地址：ADC_DR
+-   存储器地址：SRAM内定义数组ADValue作为地址
+-   宽度都是16，半字节传输
+-   外设地址不自增，存储器自增
+-   外设地址向存储器地址
+-   计数器为7
+-   如果是ADC连续扫描，DMA自动重装
+-   触发为硬件触发，**ADC硬件触发**
+
+### 手册
+
+-   10
+-   2-存储器和总线架构
+
+### 编程相关
+
+1.   开启DMA时钟(AHB总线)
+2.   调用···DMA_Init初始化
+     -   起始地址
+     -   数据宽度
+     -   地址是否自增
+     -   方向
+     -   传输计数器
+     -   是否重装
+     -   选择触发源M2M
+     -   通道优先级
+3.   开关控制DMA_Cmd给指定通道
+4.   **如果是硬件触发的话**，记得调用一下xxx_DMACmd开启触发信号的输出
+5.   **如果需要中断**可以开启DMA_ITConfig，在NVIC内配置通道写函数即可
+6.   **如果需要在转运完成后手动给传输计数器赋值的话**，给DMA失能，赋值计数器，再使能即可
+
+```c
+// @brief 回复缺省配置
+void DMA_DeInit(DMA_Channel_TypeDef* DMAy_Channelx);
+
+// @brief 初始化
+void DMA_Init(DMA_Channel_TypeDef* DMAy_Channelx, DMA_InitTypeDef* DMA_InitStruct);
+
+// @brief 结构体初始化
+void DMA_StructInit(DMA_InitTypeDef* DMA_InitStruct);
+
+// @brief 使能
+void DMA_Cmd(DMA_Channel_TypeDef* DMAy_Channelx, FunctionalState NewState);
+
+// @brief 中断输出使能
+void DMA_ITConfig(DMA_Channel_TypeDef* DMAy_Channelx, uint32_t DMA_IT, FunctionalState NewState);
+
+// @brief 给传输计数器写数据
+void DMA_SetCurrDataCounter(DMA_Channel_TypeDef* DMAy_Channelx, uint16_t DataNumber); 
+
+// @brief 获取传输寄存器的值
+uint16_t DMA_GetCurrDataCounter(DMA_Channel_TypeDef* DMAy_Channelx);
+
+// @brief 获取标志位状态
+FlagStatus DMA_GetFlagStatus(uint32_t DMAy_FLAG);
+
+// @brief 清除标志位状态
+void DMA_ClearFlag(uint32_t DMAy_FLAG);
+
+// @brief 获取中断状态
+ITStatus DMA_GetITStatus(uint32_t DMAy_IT);
+
+// @brief 清除中断挂起位
+void DMA_ClearITPendingBit(uint32_t DMAy_IT);
+
+
+```
+
+
+
