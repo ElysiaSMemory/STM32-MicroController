@@ -1942,7 +1942,7 @@ void ADC_ClearITPendingBit(ADC_TypeDef* ADCx, uint16_t ADC_IT);
 6.   **如果需要在转运完成后手动给传输计数器赋值的话**，给DMA失能，赋值计数器，再使能即可
 
 ```c
-// @brief 回复缺省配置
+// @brief 恢复缺省配置
 void DMA_DeInit(DMA_Channel_TypeDef* DMAy_Channelx);
 
 // @brief 初始化
@@ -1980,9 +1980,7 @@ void ADC_DMACmd()
 
 ```
 
-## URAT
-
-### 通信协议简介
+## 通信协议
 
 ![image-20230814170542114](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230814170542114.png)
 
@@ -2068,3 +2066,234 @@ void ADC_DMACmd()
 
 -   串口的停止位可以设置为1位，1.5位，2位
 
+## USART 外设
+
+![image-20230815105830559](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815105830559.png)
+
+-   同步模式多一个时钟输出，为了兼容别的协议，一般还是异步
+
+**常用配置**：波特率9600/115200，数据位8位，停止位1位，不校验
+
+-   硬件流控制：如果A向B发送，而且发送太快，如果没有硬件流控制B接收不过来就会损失数据；如果有硬件流控制，B可以在准备好时置低电平（没准备好置高电平），A只会在B准备好的时候才会发送数据
+
+### USART框图
+
+-   TX，RX是输入输出的引脚
+-   SW_RX，IRDA_OUT，IRDA_IN是智能卡和IrDA的引脚
+-   TDR（只写）和RDR（只读）在**程序**上表现为一个寄存器，数据寄存器DR，实际上硬件有两个
+
+![image-20230815111658249](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815111658249.png)
+
+-   **发送移位寄存器**：把数据一位一位移出去，对应串口协议的波形数据位
+    -   比如如果写入TDR - 0x55（0101 0101）
+    -   硬件检测到写入数据，检查移位寄存器是否在工作，如果没有，立刻把TDR里的送到移位寄存器里准备发送；置**标志位TXE**，发送位空
+        -   如果标志位TXE是1，可以在TDR写入下一个数据
+    -   发送器控制会控制移位寄存器**向右移位**，把数据输出到TX引脚
+    -   数据帧之间可以连续发送
+
+![image-20230815112329867](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815112329867.png)
+
+-   **接收数据寄存器**
+    -   数据从RX引脚进入接收移位寄存器，在接收器控制的控制下，一位一位读取RX电平
+    -   先放在最高位，然后右移
+    -   当一个字节完成转移后，会一下吧被丢尽RDR中（开始接收下一帧数据）
+    -   置RXNE表示位，接收数据寄存器非空
+    -   检测到即可读走
+
+-   发送加上帧头帧尾，接收剔除帧头帧尾默认电路自动执行
+
+![image-20230815120022939](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815120022939.png)
+
+-   **硬件流控制**
+    -   引脚同样是交叉连接
+    -   nRTS请求发送，输出脚“我当前能不能接收”
+        -   和其他设备连接后
+        -   RTS输出低电平：可以接收
+        -   RTX输出高电平：不可接收，暂停
+    -   nCTS准许发送，接收别人nRTS的信号
+
+![image-20230815120715842](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815120715842.png)
+
+-   **SCLK**用于产生同步的时间信号
+
+    -   配合发送位移寄存器输出
+    -   每移位一位，时钟走一个周期，告诉对方我移出一位数据了，是否需要指导接收？
+    -   只能输出，单向
+    -   用途
+        -   兼容别的协议，比如SPI
+        -   自适应波特率，接收设备不确定发送设备是什么波特率，软件计算
+
+    ![image-20230815121037838](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815121037838.png)
+
+-   **唤醒单元**：实现串口挂载多设备
+    -   一条总线上多个设备，需要寻址
+    -   给每个设备设置USART地址
+    -   收到对应地址的设备的唤醒单元会工作，否则沉默
+
+![image-20230815121221314](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815121221314.png)
+
+-   **中断输出控制**
+
+    -   重要标志位
+        -   TXE发送寄存器空
+        -   RXNE接收寄存器非空
+    -   配置中断是否能通往NVIC
+
+    ![image-20230815121602584](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815121602584.png)
+
+-   **波特率发生器**
+    -   USART1挂载在APB2，使用PCLK2的时钟，72M
+    -   其他在APB1， 一般36M
+    -   除以USARTDIV分频系数，支持小数点后四位（更加精准）
+    -   分频完成还要/16，得到发送器接收器时钟
+
+![image-20230815121648594](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815121648594.png)
+
+引脚要查看定义
+
+### 基本结构图总结
+
+![image-20230815121959413](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815121959413.png)
+
+-   两个标志位都可以申请中断
+
+### 数据帧
+
+![image-20230815131743726](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815131743726.png)
+
+-   每个数据的中间是时钟的上升沿，时钟的频率和数据的速率是一样的
+-   接收端可以在**时钟上升沿采样**
+-   空闲帧和断开帧都是局域网使用的
+
+![image-20230815132501224](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815132501224.png)
+
+-   可以配置停止位的时长不一样
+
+### 输入的检测和匹配
+
+-   输入的采样率和波特率要一致，而且输入采样的位置要在每一位的正中间，这样才可靠；还要有能力判断噪声，根据噪声置标志位
+
+![image-20230815133618302](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815133618302.png)
+
+-   以波特率的16倍进行采样，一位时间内采样16次
+-   最开始空闲状态采样一直是1，某个位置突然收到下降沿，如果没有噪声，马上跟着就是起始位
+-   在起始位进行连续16次采样（没有噪声那么都是0）
+-   在下降沿后的第3，5，7次进行采样
+-   在下降沿后的第8，9，10次进行采样
+    -   要求每3位中要有2个0
+    -   如果不是都是0，在状态寄存器会置NE（Noise Error）
+    -   不合规，不算检测到起始位，忽略前面的数据重新开始捕获下降沿
+-   如果通过检测，接收状态从空闲转换为**接收起始位**
+-   第8，9，10次正好是**中间**，后面的采样也要在这里
+
+![image-20230815133801884](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815133801884.png)
+
+-   在中间采样
+-   如果没有噪声三次都是一样的，如果有噪声按照2：1的规则来，多数获胜，NE也会置1
+
+### 波特率发生器
+
+-   波特率发生器就是分频器
+-   分为整数和小数部分
+
+![image-20230815134013817](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815134013817.png)
+
+-   注意是2或1，然后要除以16，作为上一段的**采样时钟**，才说过的
+-   所以输入时钟/DIV = 16倍的波特率
+
+![image-20230815134207887](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815134207887.png)
+
+假设计算BRR的值，考虑波特率9600
+
+-   整数前面多的补0，小数后面补0
+
+### 手册（CH340G模块）
+
+![image-20230815135108588](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815135108588.png)
+
+-   USB端口
+    -   GND， VCC（5V）
+    -   D+，D-（通信线）
+    -   USB协议
+-   CH340芯片转换成串口协议（TXD RXD）
+
+![image-20230815135141980](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815135141980.png)
+
+-   分别有5V和3.3V的输出，从稳压电路输出
+-   第五脚通向CH340的电源输入脚，条线帽插在**45**或者56脚上
+-   跳线帽选择通信电平+供电
+
+![image-20230815135254459](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815135254459.png)
+
+![image-20230815135506032](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815135506032.png)
+
+-   底下都是指示灯，有数据对应的指示灯会亮
+
+### 手册
+
+-   25
+
+### 编程相关
+
+![image-20230815121959413](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815121959413.png)
+
+1.   开始时钟，UART和GPIO
+2.   GPIO初始化（不配置下拉输入），TX配置复用输出，RX配置输入
+3.   配置USART，结构体
+4.   配置接收中断
+     -   ITConfig和NVIC
+5.   调用发送和接收的函数，或者获取标志位的函数
+
+```c
+// @brief 恢复缺省配置
+void USART_DeInit(USART_TypeDef* USARTx);
+
+// @brief 初始化
+void USART_Init(USART_TypeDef* USARTx, USART_InitTypeDef* USART_InitStruct);
+
+// @brief 结构体初始化
+void USART_StructInit(USART_InitTypeDef* USART_InitStruct);
+
+// @brief 配置同步时钟输出
+void USART_ClockInit(USART_TypeDef* USARTx, USART_ClockInitTypeDef* USART_ClockInitStruct);
+
+// @brief 时钟输出结构体初始化
+void USART_ClockStructInit(USART_ClockInitTypeDef* USART_ClockInitStruct);
+
+// @brief 启用
+void USART_Cmd(USART_TypeDef* USARTx, FunctionalState NewState);
+
+// @brief 配置中断
+void USART_ITConfig(USART_TypeDef* USARTx, uint16_t USART_IT, FunctionalState NewState);
+
+
+void USART_DMACmd(USART_TypeDef* USARTx, uint16_t USART_DMAReq, FunctionalState NewState);
+
+// @brief 地址，唤醒，LIN不用
+void USART_SetAddress(USART_TypeDef* USARTx, uint8_t USART_Address);
+void USART_WakeUpConfig(USART_TypeDef* USARTx, uint16_t USART_WakeUp);
+void USART_ReceiverWakeUpCmd(USART_TypeDef* USARTx, FunctionalState NewState);
+void USART_LINBreakDetectLengthConfig(USART_TypeDef* USARTx, uint16_t USART_LINBreakDetectLength);
+void USART_LINCmd(USART_TypeDef* USARTx, FunctionalState NewState);
+
+// @brief 发送数据
+// No need to clear TXE flag, next call flag is unset
+void USART_SendData(USART_TypeDef* USARTx, uint16_t Data);
+
+// @brief 接收数据
+uint16_t USART_ReceiveData(USART_TypeDef* USARTx);
+
+// @brief 标志位函数
+FlagStatus USART_GetFlagStatus(USART_TypeDef* USARTx, uint16_t USART_FLAG);
+void USART_ClearFlag(USART_TypeDef* USARTx, uint16_t USART_FLAG);
+ITStatus USART_GetITStatus(USART_TypeDef* USARTx, uint16_t USART_IT);
+void USART_ClearITPendingBit(USART_TypeDef* USARTx, uint16_t USART_IT);
+
+```
+
+#### 数据模式
+
+![image-20230815225355814](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20230815225355814.png)
+
+-   取数字某一位
+    -   数字/10^x^ % 10
