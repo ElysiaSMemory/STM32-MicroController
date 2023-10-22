@@ -2382,3 +2382,181 @@ HEX数据包：直接丢进数组一发完事
 -   可以读取.bin的原始数据文件，注意抄袭问题
 -   选项字节STATIC，可以用于上位机配置
 -   读保护，写保护，硬件参数，用户参数
+
+## I2C Communication Protocal (Software)
+
+-   如果在运行过程中不需要同时接收和发送，会浪费一根数据线
+-   半双工 （同时一方工作）
+-   应答机制 （确认接收）
+-   多挂载 （一主多从 【从机被点名后才能发言】， 多主多从【任何都可以自称主机，冲突时仲裁】）
+-   同步 （时钟线）
+-   两根通讯线 SCL （Serial Clock），SDA（Serial Data）
+
+### 硬件规定
+
+![image-20231021192844436](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021192844436.png)
+
+**主机**
+
+-   任何时候都是主机完全掌控SCL线
+-   空闲状态下，主机可以主动发起对SDA的控制
+-   只有在从机发送数据或者应答时主机转交SDA
+
+**从机**
+
+-   被动读取SCL时钟线，不控制
+-   被动控制SDA, 需要主机命令或者应答
+
+![image-20231021193144353](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021193144353.png)
+
+**上拉电阻**
+
+-   防止协调失误造成设备短路。
+-   所有设备禁用高电平输出，采取弱上拉+开漏输出模式 
+
+**引脚细节**
+
+-   输入电路不影响，任何设备任何时间可以输入，通过施密特触发器
+-   输出是开漏输出
+    -   低电平：强下拉
+    -   高电平：浮空，被上拉电阻弱上拉
+-   回想弹簧横杆模型
+    -   所有人不许上推杆子
+    -   只能向下拉或者放手
+    -   外置弹簧满足上拉需求
+-   同时兼具输入和输出功能
+
+![image-20231021193956258](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021193956258.png)
+
+### 软件规定
+
+**起始条件**
+
+-   总线处于空闲状态，没有人去拉杆子， SCL & SDA同时高电平状态（上拉）
+-   主机需要数据收发时，SDA下降沿，从机捕获SDA下降沿 & SCL高电平，复位，等待召唤
+-   完成后， 主机再把SCL拉下来（时序单元低电平开始低电平结束，方便拼接）
+
+![image-20231021194512700](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021194512700.png)
+
+**结束条件**
+
+-   先放手SCL时钟，回弹高电平
+-   然后回弹SDA，产生上升沿
+-   上升沿触发终止条件
+
+![image-20231021195504564](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021195504564.png)
+
+**发送字节**
+
+-   SCL低电平期间，主机依次把数据放在SDA线上（高位先行），释放SCL回弹
+-   从机在SCL高电平期间读取数据位
+-   SCL高电平期间，SDC不应该有变化
+-   循环八次发送一个字节
+-   **总结：低电平期间主机变换数据，高电平期间从机读取数据**
+
+-   从机一般在上升沿就读取了 
+
+![image-20231021195818033](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021195818033.png)
+
+**接收字节**
+
+-   SCL低电平期间，从机把数据放在SDA线上（高位先行），然后释放SCL
+-   主机在SCL高电平时读取数据，完成后拉低电平（主机在接收前释放SDA）
+-   重复八次
+-   **总结：主机释放SDA，低电平期间从机变换数据，高电平期间主机读取数据**
+
+-   实线是主机控制，虚线是从机控制
+
+![image-20231021200830847](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021200830847.png)
+
+**应答机制**
+
+-   发送 或者 接收一位作为应答
+-   发送应答：主机接收后下一个时钟发送一位数据，0应答，1非应答
+-   接收应答：主机发送完后，下一个时钟接收一位数据，判断从机是否应答，0应答，1非应答
+
+-   右边是发送后接收，左边是接收后发送应答
+
+![image-20231021201106688](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021201106688.png)
+
+### 数据帧
+
+-   主机需要通过地址确认和哪一个从机互动（7位和十位地址）
+
+**指定地址写**
+
+![image-20231021201722741](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021201722741.png)
+
+起始条件后，必须发送一个地址，最后一位是读写（绿色为从机读取时间）
+
+-   0是写入，1是读出
+
+![image-20231021201832313](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021201832313.png)
+
+此时，主机释放SDA, 从机接力拉住SDA（第一个绿色为主机读取时间）
+
+![image-20231021202254218](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021202254218.png)
+
+应答结束后，从机释放SDA（几乎同时发生）
+
+![image-20231021202554383](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021202554383.png)
+
+接下来开始第二个字节，一般是从机的寄存器地址或者指令
+
+![image-20231021202730208](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021202730208.png)
+
+发送数据，并且在停止条件前拉低SDA为后面的上升沿做准备
+
+![image-20231021202852407](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021202852407.png)
+
+**当前地址读**
+
+![image-20231021202940252](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021202940252.png)
+
+起始条件
+
+![image-20231021203003259](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021203003259.png)
+
+主机发送字节寻址，指定读学标志位。发送后接收应答位。
+
+![image-20231021203051381](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021203051381.png)
+
+从这里开始SDA控制权转交于从机（这一段绿色是主机读取）
+
+![image-20231021203204324](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021203204324.png)
+
+-   I2C协议规定，主机进行寻址时，如果表示要读（1），下一个字节马上开始读取
+-   因此不知道需要从哪个寄存器读取数据
+-   **当前地址指针**
+    -   所有寄存器中，寄存器被分配到一个线性区域中
+    -   指针变量指向其中地址，默认地址0
+    -   写入或者读出后指针自动++
+
+**指定地址读**
+
+-   指定了读取地址
+-   （指定地址写时序 - 写数据的部分）+ 当前地址读时序
+
+![image-20231021203803001](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021203803001.png)
+
+启动！发送字节进行寻址，写操作。发送地址，地址写入从机的地址指针内了
+
+![image-20231021203931103](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021203931103.png)
+
+直接不写写入的数据，直接写起始条件，另开时序。重现寻址后接1表示开读！然后接收一个字节。
+
+**要发送非应答**表示结束，从机**释放**总线
+
+![image-20231021204051131](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021204051131.png)
+
+**连续写入读出**
+
+-   直接在写入的数据帧后重复数据即可
+-   每次写入指针++
+-   读出同理，注意最后一位给非应答
+
+![image-20231021204311840](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021204311840.png)
+
+## MPU6050
+
+![image-20231021204906389](C:/Users/24962/AppData/Roaming/Typora/typora-user-images/image-20231021204906389.png)
