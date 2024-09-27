@@ -13,7 +13,6 @@ This repository documents the learning progress and projects using the **STM32F1
 - **Language**: C
 - **Library**: Standard Peripheral Library
 - **Code**: Fully commented for clarity and learning
-- **Special Thanks**: 江协科技 for support and hardware supply
 
 ## Project Overview
 
